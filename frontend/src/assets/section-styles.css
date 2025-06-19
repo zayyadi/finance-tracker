@@ -1,0 +1,23 @@
+.dashboard-section {
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 5px;
+}
+.dashboard-section h3 { margin-top: 0; color: #333; }
+.item-list { list-style: none; padding: 0; }
+.list-item { background-color: #fff; border: 1px solid #ddd; padding: 10px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.list-item div:first-child { flex-grow: 1; }
+.list-item small { display: block; color: #555; font-size: 0.9em; margin-top: 4px;}
+.list-item .actions { white-space: nowrap; }
+.list-item .actions .btn { margin-left: 8px; padding: 5px 8px; }
+
+.add-btn { background-color: #5cb85c; color: white; margin-bottom: 10px; }
+.add-btn:hover { background-color: #4cae4c; }
+.edit-btn { background-color: #f0ad4e; color: white; }
+.edit-btn:hover { background-color: #ec971f; }
+.delete-btn { background-color: #d9534f; color: white; }
+.delete-btn:hover { background-color: #c9302c; }
+
+.btn { /* Ensure .btn is defined if not already in main.css */ }

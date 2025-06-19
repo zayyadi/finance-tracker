@@ -1,0 +1,39 @@
+/* Global Styles */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  margin: 0;
+  padding: 0;
+  background-color: #f4f7f6;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* General utility classes */
+.error-message {
+  color: #d9534f;
+  background-color: #f2dede;
+  border: 1px solid #ebccd1;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.loading-message {
+  color: #777;
+  font-style: italic;
+  padding: 10px 0;
+}
+
+[v-cloak] {
+  display: none;
+}
+
+/* Button styles (can be component-specific or global) */
+.btn {
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+  font-weight: 500;
+  margin-right: 8px; /* For spacing if multiple buttons */
+}

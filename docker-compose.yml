@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: finance_tracker_pgdb # Changed from finance_tracker_db to avoid conflict with db name itself
+    environment: # Referencing variables from a .env file
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD} # Note: Use strong passwords in production, consider secrets management
+      POSTGRES_DB: finance_tracker_db
+    ports:
+      - "5432:5432" # Maps container port 5432 to host port 5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persists database data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trackeruser -d finance_tracker_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: . # Build from Dockerfile in the current directory
+      dockerfile: Dockerfile
+    container_name: finance_tracker_app_service
+    depends_on:
+      db:
+        condition: service_healthy # Wait for db to be healthy
+    ports:
+      - "${APP_PORT}:8080" # Maps container port 8080 (set by ENV PORT in Dockerfile) to host port ${APP_PORT}
+    environment: # Referencing variables from a .env file
+      DB_HOST: db         # Service name 'db' from this docker-compose file
+      DB_PORT: 5432
+      DB_USER: ${DB_USER} # Should match POSTGRES_USER in db service
+      DB_PASSWORD: ${DB_PASSWORD} # Should match POSTGRES_PASSWORD in db service
+      DB_NAME: finance_tracker_db   # Should match POSTGRES_DB in db service
+      DB_SSLMODE: ${DB_SSLMODE} # Common for local Docker setup; use 'require' or 'verify-full' in prod
+
+      JWT_SECRET_KEY: ${JWT_KEY} # Change this for production
+      OPENROUTER_API_KEY: "" # Set to your actual OpenRouter API key if you want to test AI features
+                             # Leaving it empty will make the AI service return a predefined message.
+      GIN_MODE: debug      # 'debug' for development, 'release' for production (overrides Dockerfile ENV if set here)
+      PORT: 8080           # Port the Go application listens on inside the container
+    restart: unless-stopped
+    # Optional: Add volumes for live code reloading during development (not for production image)
+    # volumes:
+    #   - .:/app # Mounts current directory to /app in container. Be careful with go.mod/vendor.
+
+volumes:
+  postgres_data: # Defines the named volume for data persistence
+    driver: local
