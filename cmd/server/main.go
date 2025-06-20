@@ -13,6 +13,7 @@ import (
 	"github.com/robfig/cron/v3" // Added for cron jobs
 	"github.com/zayyadi/finance-tracker/internal/database"
 	"github.com/zayyadi/finance-tracker/internal/handlers"
+	"github.com/zayyadi/finance-tracker/internal/models" // Added for direct AutoMigrate
 	"github.com/zayyadi/finance-tracker/internal/services"
 )
 
@@ -44,7 +45,17 @@ func main() {
 		log.Fatalf("Failed to get GORM DB instance after connecting")
 	}
 
-	if err := database.AutoMigrateModels(db); err != nil {
+	// Perform Auto-Migration directly here
+	log.Println("Starting GORM auto-migration...")
+	err = db.AutoMigrate(
+		&models.User{}, // Ensure User table is created first if others depend on it
+		&models.Income{},
+		&models.Expense{},
+		&models.Savings{},
+		&models.Debt{},
+		&models.FinancialSummary{},
+	)
+	if err != nil {
 		log.Fatalf("Failed to auto-migrate GORM models: %v", err)
 	} else {
 		log.Println("GORM models auto-migrated successfully.")
@@ -77,6 +88,7 @@ func main() {
 	aiAdviceService := services.NewAIAdviceService()
 	reportService := services.NewReportService(incomeService, expenseService)
 	notificationService := services.NewNotificationService(db) // Instantiate NotificationService
+	analyticsService := services.NewAnalyticsService(db)    // New AnalyticsService
 
 	// Instantiate handlers
 	// authHandler := handlers.NewAuthHandler(userService) // Removed AuthHandler
@@ -87,6 +99,7 @@ func main() {
 	summaryHandler := handlers.NewSummaryHandler(summaryService)
 	aiAdviceHandler := handlers.NewAIAdviceHandler(aiAdviceService, summaryService)
 	reportHandler := handlers.NewReportHandler(reportService)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService) // New AnalyticsHandler
 	// viewHandler := handlers.NewViewHandler() // Removed as Go no longer serves HTML pages
 
 	// Frontend Page Routes are removed.
@@ -158,6 +171,12 @@ func main() {
 		{
 			reportRoutes.GET("/csv", reportHandler.GenerateCSVReportHandler)
 			reportRoutes.GET("/pdf", reportHandler.GeneratePDFReportHandler)
+		}
+
+		analyticsRoutes := apiV1.Group("/analytics")
+		{
+			analyticsRoutes.GET("/expense-categories", analyticsHandler.GetExpenseBreakdownHandler)
+			analyticsRoutes.GET("/income-expense-trend", analyticsHandler.GetIncomeExpenseTrendHandler)
 		}
 	}
 

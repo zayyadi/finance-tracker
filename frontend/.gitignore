@@ -1,0 +1,33 @@
+# Ignore Node.js dependency directory
+node_modules/
+
+# Ignore build output
+dist/
+# Optionally, if you have other build outputs or specific files:
+# build/
+# *.vite.js
+# .vite/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables file
+.env
+.env*.local
+.env.*.local
+
+# IDE and editor directories
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Optional: Operating System generated files
+.DS_Store
+Thumbs.db

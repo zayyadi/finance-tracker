@@ -110,13 +110,13 @@ func (s *SummaryService) calculateTotalForPeriodGORM(userID uint, startDate, end
 	var total sql.NullFloat64 // Use sql.NullFloat64 to handle potential NULL sum from DB
 	// Removed Where("user_id = ?", userID) as the application is now single-user
 	result := s.DB.Model(modelInstance).
-		Where("user_id = ? AND date BETWEEN ? AND ?", userID, startDate, endDate).
+		Where("date BETWEEN ? AND ?", startDate, endDate).
 		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 if no records
 		Scan(&total)
 
 	if result.Error != nil {
 		// It's better to log the specific model being queried if possible, but modelInstance is interface{}
-		log.Printf("Error calculating total for user %d between %s and %s: %v", userID, startDate, endDate, result.Error)
+		log.Printf("Error calculating total between %s and %s for model %T: %v", startDate, endDate, modelInstance, result.Error)
 		return 0, result.Error
 	}
 	return total.Float64, nil // Return 0.0 if sum was NULL (due to COALESCE)
