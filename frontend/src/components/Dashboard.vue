@@ -24,6 +24,41 @@
     <SavingsSection @open-modal="openModal" :key="sectionKeys.savings" @item-changed="handleItemChange" />
     <DebtsSection @open-modal="openModal" :key="sectionKeys.debts" @item-changed="handleItemChange" />
 
+    <!-- Analytics Section -->
+    <section class="dashboard-section analytics-section">
+      <h3>Analytics</h3>
+
+      <!-- Expense Breakdown -->
+      <div class="analytics-chart">
+        <h4>Expense Breakdown (Current Month)</h4>
+        <div v-if="expenseBreakdown.loading" class="loading-message">Loading expense breakdown...</div>
+        <div v-if="expenseBreakdown.error" class="error-message">{{ expenseBreakdown.error }}</div>
+        <div v-if="!expenseBreakdown.loading && !expenseBreakdown.error && pieChartData">
+          <div style="height: 300px"> <!-- Set a height for the chart container -->
+            <Pie :data="pieChartData" :options="pieChartOptions" />
+          </div>
+        </div>
+        <div v-if="!expenseBreakdown.loading && !expenseBreakdown.error && !pieChartData && (!expenseBreakdown.data || expenseBreakdown.data.length === 0)">
+          No expense data for category breakdown.
+        </div>
+      </div>
+
+      <!-- Income vs. Expense Trend -->
+      <div class="analytics-chart">
+        <h4>Income vs. Expense Trend (Last 6 Months)</h4>
+        <div v-if="incomeExpenseTrend.loading" class="loading-message">Loading trend data...</div>
+        <div v-if="incomeExpenseTrend.error" class="error-message">{{ incomeExpenseTrend.error }}</div>
+        <div v-if="!incomeExpenseTrend.loading && !incomeExpenseTrend.error && barChartData">
+          <div style="height: 300px"> <!-- Set a height for the chart container -->
+            <Bar :data="barChartData" :options="barChartOptions" />
+          </div>
+        </div>
+        <div v-if="!incomeExpenseTrend.loading && !incomeExpenseTrend.error && !barChartData && (!incomeExpenseTrend.data || incomeExpenseTrend.data.length === 0)">
+          No income/expense trend data available.
+        </div>
+      </div>
+    </section>
+
     <!-- Add/Edit Modal (Generic) -->
     <GenericModal
       v-if="showModal"
@@ -39,8 +74,21 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue';
+import { ref, onMounted, reactive, computed } from 'vue'; // Ensure reactive and computed are imported
 import api from '../services/api.js';
+import { Pie, Bar } from 'vue-chartjs';
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  ArcElement
+} from 'chart.js';
+
+ChartJS.register(Title, Tooltip, Legend, ArcElement, CategoryScale, LinearScale, BarElement);
 
 // Import section components (we'll create these as placeholders)
 import IncomeSection from './IncomeSection.vue';
@@ -56,6 +104,18 @@ const summary = reactive({
   error: null,
   data: null,
   initialLoad: true, // To prevent "No data" message on initial load
+});
+
+const expenseBreakdown = reactive({
+  loading: false,
+  error: null,
+  data: null, // To store array of { category: string, totalAmount: float64 }
+});
+
+const incomeExpenseTrend = reactive({
+  loading: false,
+  error: null,
+  data: null, // To store array of { month: string, totalIncome: float64, totalExpenses: float64 }
 });
 
 const showModal = ref(false);
@@ -106,10 +166,117 @@ const fetchSummary = async () => {
   }
 };
 
+const fetchExpenseBreakdown = async () => {
+  expenseBreakdown.loading = true;
+  expenseBreakdown.error = null;
+  try {
+    const response = await api.get('/analytics/expense-categories'); // Using api.js service
+    expenseBreakdown.data = response.data;
+  } catch (err) {
+    console.error("Error fetching expense breakdown:", err);
+    expenseBreakdown.error = "Failed to load expense breakdown. " + (err.response?.data?.error || err.message);
+    expenseBreakdown.data = null;
+  } finally {
+    expenseBreakdown.loading = false;
+  }
+};
+
+const fetchIncomeExpenseTrend = async () => {
+  incomeExpenseTrend.loading = true;
+  incomeExpenseTrend.error = null;
+  try {
+    // Assuming default 6 months from backend, or add query param: /analytics/income-expense-trend?months=6
+    const response = await api.get('/analytics/income-expense-trend');
+    incomeExpenseTrend.data = response.data;
+  } catch (err) {
+    console.error("Error fetching income/expense trend:", err);
+    incomeExpenseTrend.error = "Failed to load income/expense trend. " + (err.response?.data?.error || err.message);
+    incomeExpenseTrend.data = null;
+  } finally {
+    incomeExpenseTrend.loading = false;
+  }
+};
+
+
 onMounted(() => {
   fetchSummary();
+  fetchExpenseBreakdown();
+  fetchIncomeExpenseTrend();
   // Fetch other initial data (income, expenses, etc.)
 });
+
+// --- Chart Computed Properties ---
+const pieChartData = computed(() => {
+  if (!expenseBreakdown.data || expenseBreakdown.data.length === 0) {
+    return null;
+  }
+  // Ensure field names match the backend (Category, TotalAmount)
+  return {
+    labels: expenseBreakdown.data.map(item => item.category),
+    datasets: [
+      {
+        backgroundColor: ['#41B883', '#E46651', '#00D8FF', '#DD1B16', '#FFC107', '#607D8B', '#FF9800', '#8BC34A', '#03A9F4', '#9C27B0'],
+        data: expenseBreakdown.data.map(item => item.total_amount),
+      },
+    ],
+  };
+});
+
+const pieChartOptions = ref({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+    title: {
+      display: false,
+      text: 'Expense Breakdown by Category'
+    }
+  }
+});
+
+const barChartData = computed(() => {
+  if (!incomeExpenseTrend.data || incomeExpenseTrend.data.length === 0) {
+    return null;
+  }
+  // Ensure field names match the backend (Month, TotalIncome, TotalExpenses)
+  return {
+    labels: incomeExpenseTrend.data.map(item => item.month),
+    datasets: [
+      {
+        label: 'Total Income',
+        backgroundColor: '#41B883',
+        data: incomeExpenseTrend.data.map(item => item.total_income),
+      },
+      {
+        label: 'Total Expenses',
+        backgroundColor: '#E46651',
+        data: incomeExpenseTrend.data.map(item => item.total_expenses),
+      },
+    ],
+  };
+});
+
+const barChartOptions = ref({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+    title: {
+      display: false,
+      text: 'Income vs. Expense Trend'
+    }
+  },
+  scales: {
+    y: {
+      beginAtZero: true
+    }
+  }
+});
+
 
 // --- Modal Logic ---
 const openModal = (mode, itemToEdit = null) => {
@@ -204,6 +371,46 @@ const handleFormSubmit = async (formData) => {
 }
 .summary-section strong {
     color: #2c3e50;
+}
+
+.analytics-section {
+  /* Similar to other sections or define new styles */
+  background-color: #f0f7ff; /* Light blue background for distinction */
+}
+.analytics-chart {
+  margin-top: 20px;
+  padding: 15px; /* Increased padding */
+  border: 1px solid #dce9f5; /* Lighter border */
+  border-radius: 4px;
+  background-color: #fff; /* White background for chart area */
+}
+.analytics-chart h4 {
+  margin-top: 0;
+  font-size: 1.1em;
+  color: #337ab7; /* Theme color for heading */
+}
+.loading-message, .error-message {
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+.loading-message {
+  background-color: #e9f5ff;
+  color: #31708f;
+}
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+/* Placeholder styling for pre tag */
+.analytics-chart pre {
+  background-color: #f5f5f5;
+  padding: 10px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  max-height: 200px; /* Limit height */
+  overflow-y: auto; /* Add scroll for overflow */
 }
 
 </style>
