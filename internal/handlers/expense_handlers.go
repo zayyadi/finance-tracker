@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log" // Added for logging
 	"net/http"
 	"strconv"
 	"strings"
@@ -100,6 +101,7 @@ func (h *ExpenseHandler) ListExpensesHandler(c *gin.Context) {
 // UpdateExpenseHandler handles updating an existing expense record.
 func (h *ExpenseHandler) UpdateExpenseHandler(c *gin.Context) {
 	expenseIDStr := c.Param("id")
+	log.Printf("[ExpenseHandler] UpdateExpenseHandler: Received raw ID string: '%s'", expenseIDStr)
 	expenseIDUint64, err := strconv.ParseUint(expenseIDStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID format"})
@@ -133,6 +135,7 @@ func (h *ExpenseHandler) UpdateExpenseHandler(c *gin.Context) {
 // DeleteExpenseHandler handles deleting an expense record.
 func (h *ExpenseHandler) DeleteExpenseHandler(c *gin.Context) {
 	expenseIDStr := c.Param("id")
+	log.Printf("[ExpenseHandler] DeleteExpenseHandler: Received raw ID string: '%s'", expenseIDStr)
 	expenseIDUint64, err := strconv.ParseUint(expenseIDStr, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID format"})
