@@ -5,7 +5,7 @@
     <button @click="$emit('openModal', 'debts')" class="btn add-btn">Add Debt</button>
     
     <ul v-if="items.length > 0" class="item-list">
-      <li v-for="item in items" :key="item.id" class="list-item">
+      <li v-for="item in items" :key="item.ID" class="list-item"> <!-- Changed item.id to item.ID -->
         <div>
           <strong>{{ item.debtor_name }}</strong> - {{ formatCurrency(item.amount) }}<br>
           Due: {{ formatDate(item.due_date) }} - Status: <span :class="`status-${item.status?.toLowerCase()}`">{{ item.status }}</span><br>
@@ -13,7 +13,7 @@
         </div>
         <div class="actions">
           <button @click="$emit('openModal', 'debts', item)" class="btn edit-btn">Edit</button>
-          <button @click="deleteDebtItem(item.id)" class="btn delete-btn">Delete</button>
+          <button @click="deleteDebtItem(item.ID)" class="btn delete-btn">Delete</button> <!-- Changed item.id to item.ID -->
         </div>
       </li>
     </ul>

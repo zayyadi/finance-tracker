@@ -55,6 +55,10 @@ func (h *IncomeHandler) GetIncomeHandler(c *gin.Context) {
 		return
 	}
 	incomeID := uint(incomeIDUint64)
+	if incomeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid income ID format"})
+		return
+	}
 
 	income, err := h.service.GetIncomeByID(incomeID)
 	if err != nil {
@@ -110,6 +114,10 @@ func (h *IncomeHandler) UpdateIncomeHandler(c *gin.Context) {
 		return
 	}
 	incomeID := uint(incomeIDUint64)
+	if incomeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid income ID format"})
+		return
+	}
 
 	var req models.IncomeUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -143,6 +151,10 @@ func (h *IncomeHandler) DeleteIncomeHandler(c *gin.Context) {
 		return
 	}
 	incomeID := uint(incomeIDUint64)
+	if incomeID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid income ID format"})
+		return
+	}
 
 	err = h.service.DeleteIncome(incomeID)
 	if err != nil {

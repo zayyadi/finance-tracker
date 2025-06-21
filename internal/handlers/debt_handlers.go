@@ -75,6 +75,10 @@ func (h *DebtHandler) GetDebtHandler(c *gin.Context) {
 		return
 	}
 	debtID := uint(debtIDUint64)
+	if debtID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid debt ID format"})
+		return
+	}
 
 	debt, err := h.service.GetDebtByID(debtID) // UserID removed
 	if err != nil {
@@ -139,6 +143,10 @@ func (h *DebtHandler) UpdateDebtHandler(c *gin.Context) {
 		return
 	}
 	debtID := uint(debtIDUint64)
+	if debtID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid debt ID format"})
+		return
+	}
 
 	var req models.DebtUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -179,6 +187,10 @@ func (h *DebtHandler) DeleteDebtHandler(c *gin.Context) {
 		return
 	}
 	debtID := uint(debtIDUint64)
+	if debtID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid debt ID format"})
+		return
+	}
 
 	err = h.service.DeleteDebt(debtID) // UserID removed
 	if err != nil {

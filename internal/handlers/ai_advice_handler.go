@@ -32,7 +32,8 @@ func (h *AIAdviceHandler) GetAdviceHandler(c *gin.Context) {
 
 	// Fetch the latest monthly summary (e.g., for the current month)
 	targetDate := time.Now()
-	summary, err := h.summaryService.GetOrCreateFinancialSummary("monthly", targetDate) // UserID removed
+	viewType := "overall" // AI advice should be based on the overall summary
+	summary, err := h.summaryService.GetOrCreateFinancialSummary("monthly", targetDate, viewType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get financial summary: " + err.Error()})
 		return

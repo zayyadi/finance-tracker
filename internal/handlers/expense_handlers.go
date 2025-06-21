@@ -53,6 +53,10 @@ func (h *ExpenseHandler) GetExpenseHandler(c *gin.Context) {
 		return
 	}
 	expenseID := uint(expenseIDUint64)
+	if expenseID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID format"})
+		return
+	}
 
 	expense, err := h.service.GetExpenseByID(expenseID)
 	if err != nil {
@@ -108,6 +112,10 @@ func (h *ExpenseHandler) UpdateExpenseHandler(c *gin.Context) {
 		return
 	}
 	expenseID := uint(expenseIDUint64)
+	if expenseID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID format"})
+		return
+	}
 
 	var req models.ExpenseUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -142,6 +150,10 @@ func (h *ExpenseHandler) DeleteExpenseHandler(c *gin.Context) {
 		return
 	}
 	expenseID := uint(expenseIDUint64)
+	if expenseID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID format"})
+		return
+	}
 
 	err = h.service.DeleteExpense(expenseID)
 	if err != nil {
