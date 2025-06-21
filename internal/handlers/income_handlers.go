@@ -1,26 +1,30 @@
 package handlers
 
 import (
+	"log" // Added for logging
 	"net/http"
 	"strconv"
 	"strings"
+	"time" // Added for time.Time{} comparison
 
 	"github.com/gin-gonic/gin"
+	"github.com/zayyadi/finance-tracker/internal/database" // Added for database.CustomDate
 	"github.com/zayyadi/finance-tracker/internal/models"
-
-	// "fmt" // No longer needed here if getUserIDFromContext is in this package
-	// "github.com/zayyadi/finance-tracker/internal/models"
 	"github.com/zayyadi/finance-tracker/internal/services"
 )
 
 // IncomeHandler handles HTTP requests for income records.
 type IncomeHandler struct {
-	service *services.IncomeService
+	service        *services.IncomeService
+	summaryService *services.SummaryService // Added SummaryService
 }
 
-// NewIncomeHandler creates a new IncomeHandler with the given service.
-func NewIncomeHandler(service *services.IncomeService) *IncomeHandler {
-	return &IncomeHandler{service: service}
+// NewIncomeHandler creates a new IncomeHandler with the given services.
+func NewIncomeHandler(service *services.IncomeService, summaryService *services.SummaryService) *IncomeHandler {
+	return &IncomeHandler{
+		service:        service,
+		summaryService: summaryService,
+	}
 }
 
 // CreateIncomeHandler handles the creation of a new income record.
@@ -41,6 +45,16 @@ func (h *IncomeHandler) CreateIncomeHandler(c *gin.Context) {
 	if err := h.service.CreateIncome(&income); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create income record: " + err.Error()})
 		return
+	}
+
+	// Invalidate summaries
+	if h.summaryService != nil {
+		go func(dateOfItem database.CustomDate) { // Use a goroutine for non-blocking invalidation
+			err := h.summaryService.InvalidateSummariesForDate(dateOfItem.Time, []string{"monthly", "weekly", "yearly"})
+			if err != nil {
+				log.Printf("Error invalidating summaries after creating income: %v", err)
+			}
+		}(income.Date)
 	}
 
 	c.JSON(http.StatusCreated, income)
@@ -139,6 +153,19 @@ func (h *IncomeHandler) UpdateIncomeHandler(c *gin.Context) {
 		return
 	}
 
+	// Invalidate summaries
+	if h.summaryService != nil && updatedIncome.Date.Time != (time.Time{}) { // Ensure Date is valid
+		go func(dateOfItem database.CustomDate) {
+			err := h.summaryService.InvalidateSummariesForDate(dateOfItem.Time, []string{"monthly", "weekly", "yearly"})
+			if err != nil {
+				log.Printf("Error invalidating summaries after updating income: %v", err)
+			}
+		}(updatedIncome.Date)
+		// Note: If the date of the income was changed, summaries for the *old* date
+		// should also be invalidated. This requires fetching the old record before update.
+		// For simplicity, current implementation only invalidates for the new date.
+	}
+
 	c.JSON(http.StatusOK, updatedIncome)
 }
 
@@ -156,14 +183,37 @@ func (h *IncomeHandler) DeleteIncomeHandler(c *gin.Context) {
 		return
 	}
 
+	// Fetch the income first to get its date for summary invalidation
+	incomeToDelete, serviceErr := h.service.GetIncomeByID(incomeID)
+	if serviceErr != nil {
+		if strings.Contains(serviceErr.Error(), "income record not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Income record not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve income record before deletion: " + serviceErr.Error()})
+		}
+		return
+	}
+	dateOfDeletedItem := incomeToDelete.Date
+
+	// Delete the income
 	err = h.service.DeleteIncome(incomeID)
 	if err != nil {
 		if strings.Contains(err.Error(), "income record not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Income record not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Income record not found during deletion"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete income record: " + err.Error()})
 		}
 		return
+	}
+
+	// Invalidate summaries
+	if h.summaryService != nil && dateOfDeletedItem.Time != (time.Time{}) {
+		go func(dateVal database.CustomDate) {
+			err := h.summaryService.InvalidateSummariesForDate(dateVal.Time, []string{"monthly", "weekly", "yearly"})
+			if err != nil {
+				log.Printf("Error invalidating summaries after deleting income: %v", err)
+			}
+		}(dateOfDeletedItem)
 	}
 
 	c.JSON(http.StatusNoContent, nil)

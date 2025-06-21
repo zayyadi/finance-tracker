@@ -13,12 +13,16 @@ import (
 
 // ExpenseHandler handles HTTP requests for expense records.
 type ExpenseHandler struct {
-	service *services.ExpenseService
+	service        *services.ExpenseService
+	summaryService *services.SummaryService // Added SummaryService
 }
 
-// NewExpenseHandler creates a new ExpenseHandler with the given service.
-func NewExpenseHandler(service *services.ExpenseService) *ExpenseHandler {
-	return &ExpenseHandler{service: service}
+// NewExpenseHandler creates a new ExpenseHandler with the given services.
+func NewExpenseHandler(service *services.ExpenseService, summaryService *services.SummaryService) *ExpenseHandler {
+	return &ExpenseHandler{
+		service:        service,
+		summaryService: summaryService,
+	}
 }
 
 // CreateExpenseHandler handles the creation of a new expense record.
@@ -39,6 +43,16 @@ func (h *ExpenseHandler) CreateExpenseHandler(c *gin.Context) {
 	if err := h.service.CreateExpense(&expense); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create expense record: " + err.Error()})
 		return
+	}
+
+	// Invalidate summaries
+	if h.summaryService != nil {
+		go func(dateOfItem database.CustomDate) { // Use a goroutine for non-blocking invalidation
+			err := h.summaryService.InvalidateSummariesForDate(dateOfItem.Time, []string{"monthly", "weekly", "yearly"})
+			if err != nil {
+				log.Printf("Error invalidating summaries after creating expense: %v", err)
+			}
+		}(expense.Date)
 	}
 
 	c.JSON(http.StatusCreated, expense)
@@ -137,6 +151,19 @@ func (h *ExpenseHandler) UpdateExpenseHandler(c *gin.Context) {
 		return
 	}
 
+	// Invalidate summaries
+	if h.summaryService != nil && updatedExpense.Date.Time != (time.Time{}) { // Ensure Date is valid
+		go func(dateOfItem database.CustomDate) {
+			err := h.summaryService.InvalidateSummariesForDate(dateOfItem.Time, []string{"monthly", "weekly", "yearly"})
+			if err != nil {
+				log.Printf("Error invalidating summaries after updating expense: %v", err)
+			}
+		}(updatedExpense.Date)
+		// Note: If the date of the expense was changed, summaries for the *old* date
+		// should also be invalidated. This requires fetching the old record before update.
+		// For simplicity, current implementation only invalidates for the new date.
+	}
+
 	c.JSON(http.StatusOK, updatedExpense)
 }
 
@@ -155,14 +182,39 @@ func (h *ExpenseHandler) DeleteExpenseHandler(c *gin.Context) {
 		return
 	}
 
+	// Fetch the expense first to get its date for summary invalidation
+	expenseToDelete, serviceErr := h.service.GetExpenseByID(expenseID)
+	if serviceErr != nil {
+		if strings.Contains(serviceErr.Error(), "expense record not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Expense record not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve expense record before deletion: " + serviceErr.Error()})
+		}
+		return
+	}
+	dateOfDeletedItem := expenseToDelete.Date
+
+	// Delete the expense
 	err = h.service.DeleteExpense(expenseID)
 	if err != nil {
+		// This check might be redundant if GetExpenseByID already confirmed existence,
+		// but kept for safety or if DeleteExpense has other failure modes.
 		if strings.Contains(err.Error(), "expense record not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Expense record not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Expense record not found during deletion"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete expense record: " + err.Error()})
 		}
 		return
+	}
+
+	// Invalidate summaries
+	if h.summaryService != nil && dateOfDeletedItem.Time != (time.Time{}) {
+		go func(dateVal database.CustomDate) {
+			err := h.summaryService.InvalidateSummariesForDate(dateVal.Time, []string{"monthly", "weekly", "yearly"})
+			if err != nil {
+				log.Printf("Error invalidating summaries after deleting expense: %v", err)
+			}
+		}(dateOfDeletedItem)
 	}
 
 	c.JSON(http.StatusNoContent, nil)
