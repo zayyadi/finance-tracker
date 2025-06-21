@@ -1,7 +1,7 @@
 package models
 
 import (
-	// "time" // No longer needed directly for date fields after CustomDate usage
+	"github.com/zayyadi/finance-tracker/internal/database"
 	"gorm.io/gorm"
 	"github.com/zayyadi/finance-tracker/internal/database" // Added for CustomDate
 )
@@ -16,6 +16,7 @@ type Savings struct {
 	StartDate     *database.CustomDate `json:"start_date,omitempty" gorm:"default:null;type:date"`
 	TargetDate    *database.CustomDate `json:"target_date,omitempty" gorm:"default:null;type:date"`
 	Notes         string                `json:"notes,omitempty"`
+
 }
 
 // SavingsCreateRequest is used for creating a new savings goal.
@@ -37,4 +38,5 @@ type SavingsUpdateRequest struct {
 	StartDate     *database.CustomDate `json:"start_date,omitempty"` // Use pointer to distinguish between not provided and explicit null
 	TargetDate    *database.CustomDate `json:"target_date,omitempty"` // Use pointer
 	Notes         *string               `json:"notes,omitempty"`     // Use pointer
+
 }
