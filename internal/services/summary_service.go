@@ -11,7 +11,6 @@ import (
 	"github.com/zayyadi/finance-tracker/internal/database"
 	"github.com/zayyadi/finance-tracker/internal/models"
 
-	// "github.com/lib/pq" // No longer needed for pq.Error with GORM generally
 	"gorm.io/gorm"
 )
 
@@ -43,7 +42,6 @@ func (s *SummaryService) GetOrCreateFinancialSummary(summaryType string, targetD
 
 	periodStartDate, periodEndDate, err := CalculatePeriodDates(targetDate, summaryType)
 	if err != nil {
-		// Corrected the error message from the original code that had a URL in it.
 		return nil, fmt.Errorf("error calculating period dates: %w", err)
 	}
 
@@ -82,7 +80,7 @@ func (s *SummaryService) GetOrCreateFinancialSummary(summaryType string, targetD
 		if storeErr != nil {
 			// Handle potential race condition where another request created the summary in the meantime
 			if strings.Contains(storeErr.Error(), "duplicate key value violates unique constraint") &&
-				strings.Contains(storeErr.Error(), "idx_type_period") {
+				strings.Contains(storeErr.Error(), "idx_type_period") { // Ensure this index name is correct
 				log.Printf("Unique constraint violation for overall summary type %s, date %s during store. Re-fetching.", summaryType, periodStartDate.Format("2006-01-02"))
 				return s.fetchSummaryFromDB(summaryType, periodStartDate)
 			}
@@ -117,7 +115,7 @@ func (s *SummaryService) GetOrCreateFinancialSummary(summaryType string, targetD
 	netBalance := totalIncome - totalExpenses
 	// Create a non-persistent FinancialSummary object for the specific view
 	viewSummary := &models.FinancialSummary{
-		SummaryType:     summaryType, // Could also add viewType to SummaryType string if needed for frontend
+		SummaryType:     summaryType,
 		PeriodStartDate: periodStartDate,
 		PeriodEndDate:   periodEndDate,
 		TotalIncome:     totalIncome,
@@ -129,7 +127,7 @@ func (s *SummaryService) GetOrCreateFinancialSummary(summaryType string, targetD
 
 func (s *SummaryService) fetchSummaryFromDB(summaryType string, periodStartDate time.Time) (*models.FinancialSummary, error) {
 	var summary models.FinancialSummary
-	result := s.DB.Where("summary_type = ? AND period_start_date = ?", summaryType, periodStartDate).First(&summary) // Removed userID
+	result := s.DB.Where("summary_type = ? AND period_start_date = ?", summaryType, periodStartDate).First(&summary)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, gorm.ErrRecordNotFound
@@ -147,54 +145,76 @@ func (s *SummaryService) storeSummaryInDB(summary *models.FinancialSummary) (*mo
 	return summary, nil
 }
 
-// calculateTotalForPeriodGORM calculates sum of 'amount' for a given table (model) within a date range.
-// modelInstance should be a pointer to an empty struct of the model type (e.g., &models.Income{}).
 func (s *SummaryService) calculateTotalForPeriodGORM(userID uint, startDate, endDate time.Time, modelInstance interface{}) (float64, error) {
-	var total sql.NullFloat64 // Use sql.NullFloat64 to handle potential NULL sum from DB
-	// Removed Where("user_id = ?", userID) as the application is now single-user
+	var total sql.NullFloat64
 	result := s.DB.Model(modelInstance).
 		Where("date BETWEEN ? AND ?", startDate, endDate).
-		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 if no records
+		Select("COALESCE(SUM(amount), 0)").
 		Scan(&total)
 
 	if result.Error != nil {
-		// It's better to log the specific model being queried if possible, but modelInstance is interface{}
 		log.Printf("Error calculating total between %s and %s for model %T: %v", startDate, endDate, modelInstance, result.Error)
 		return 0, result.Error
 	}
-	return total.Float64, nil // Return 0.0 if sum was NULL (due to COALESCE)
+	return total.Float64, nil
 }
 
-// CalculatePeriodDates calculates the start and end dates for a given summary type and target date.
-// It's exported for testing purposes and potentially for use elsewhere if needed.
 func CalculatePeriodDates(targetDate time.Time, summaryType string) (time.Time, time.Time, error) {
-	loc := targetDate.Location() // Use the location of the targetDate for calculations
+	loc := targetDate.Location()
 	var startDate, endDate time.Time
 
 	switch summaryType {
 	case "weekly":
-		// Assuming week starts on Monday and ends on Sunday
 		weekday := targetDate.Weekday()
-		// Adjust to Monday (Sunday is 0, Monday is 1, ..., Saturday is 6)
 		daysToMonday := int(time.Monday - weekday)
-		if weekday == time.Sunday { // In Go, Sunday is 0, so if we want Monday as start, Sunday needs special handling
+		if weekday == time.Sunday {
 			daysToMonday = -6
 		}
 		startDate = targetDate.AddDate(0, 0, daysToMonday)
-		endDate = startDate.AddDate(0, 0, 6) // Sunday
+		endDate = startDate.AddDate(0, 0, 6)
 	case "monthly":
 		startDate = time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, loc)
-		endDate = startDate.AddDate(0, 1, -1) // Last day of the month
+		endDate = startDate.AddDate(0, 1, -1)
 	case "yearly":
 		startDate = time.Date(targetDate.Year(), time.January, 1, 0, 0, 0, 0, loc)
 		endDate = time.Date(targetDate.Year(), time.December, 31, 0, 0, 0, 0, loc)
 	default:
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid summary type: %s", summaryType)
 	}
-	// Normalize to midnight for date-only comparisons if necessary, though DB DATE type handles this.
-	// For consistency, let's ensure they are at the beginning of the day in their respective timezone.
 	startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, loc)
 	endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, loc)
 
 	return startDate, endDate, nil
+}
+
+// InvalidateSummariesForDate deletes summary records for specified period types based on the itemDate.
+func (s *SummaryService) InvalidateSummariesForDate(itemDate time.Time, summaryPeriodTypes []string) error {
+	if s.DB == nil {
+		return fmt.Errorf("database connection not initialized in SummaryService for invalidation")
+	}
+
+	var firstError error
+	for _, periodType := range summaryPeriodTypes {
+		periodStartDate, _, err := CalculatePeriodDates(itemDate, periodType)
+		if err != nil {
+			log.Printf("Error calculating period dates for invalidation (type: %s, itemDate: %s): %v", periodType, itemDate.Format("2006-01-02"), err)
+			if firstError == nil { // Store the first error encountered
+				firstError = fmt.Errorf("failed to calculate period for %s: %w", periodType, err)
+			}
+			continue // Try to invalidate other periods even if one fails
+		}
+
+		result := s.DB.Where("summary_type = ? AND period_start_date = ?", periodType, periodStartDate).Delete(&models.FinancialSummary{})
+		if result.Error != nil {
+			// Log error, but don't necessarily stop.
+			log.Printf("Error deleting summary for invalidation (type: %s, period_start_date: %s): %v", periodType, periodStartDate.Format("2006-01-02"), result.Error)
+			if firstError == nil {
+				firstError = fmt.Errorf("failed to delete summary for %s (period starting %s): %w", periodType, periodStartDate.Format("2006-01-02"), result.Error)
+			}
+		} else if result.RowsAffected > 0 {
+			log.Printf("Invalidated summary: type %s, period_start_date %s (triggered by item on %s)",
+				periodType, periodStartDate.Format("2006-01-02"), itemDate.Format("2006-01-02"))
+		}
+	}
+	return firstError // Return the first error encountered, or nil if all successful
 }

@@ -149,6 +149,13 @@ const summary = reactive({
   initialLoad: true, // To prevent "No data" message on initial load
 });
 
+const aiAdvice = reactive({
+  loading: false,
+  error: null,
+  data: null, // To store the advice string
+  visible: false, // To control visibility
+});
+
 const today = new Date();
 const summaryFilters = reactive({
   periodType: 'monthly', // 'monthly', 'weekly', 'yearly'
@@ -268,7 +275,30 @@ onMounted(() => {
   fetchExpenseBreakdown();
   fetchIncomeExpenseTrend();
   // Fetch other initial data (income, expenses, etc.)
+  // fetchAiAdvice(); // Not calling onMounted, user will click button
 });
+
+const fetchAiAdvice = async () => {
+  // if (!aiAdvice.visible && aiAdvice.data) return; // Optimization removed for button-click fetch
+
+  aiAdvice.loading = true;
+  aiAdvice.error = null;
+  aiAdvice.visible = true; // Make section visible to show loading/error or data
+  try {
+    const response = await api.get('/ai/advice'); // Ensure correct API endpoint
+    aiAdvice.data = response.data.advice;
+  } catch (err) {
+    console.error("Error fetching AI advice:", err);
+    if (err.response && err.response.status === 503) {
+        aiAdvice.error = "AI advice feature is currently not configured or unavailable.";
+    } else {
+        aiAdvice.error = "Failed to load AI financial advice. " + (err.response?.data?.error || err.message);
+    }
+    aiAdvice.data = null;
+  } finally {
+    aiAdvice.loading = false;
+  }
+};
 
 // --- Chart Computed Properties ---
 const pieChartData = computed(() => {
@@ -460,7 +490,12 @@ const getDefaultItemStructure = (mode) => {
 const handleItemChange = () => {
   // This function is called when an item is deleted from a child section
   // Or could be used more broadly if sections managed their own additions/edits
-  fetchSummary(); // Refresh summary
+  fetchSummary();
+  fetchExpenseBreakdown();
+  fetchIncomeExpenseTrend();
+  if (aiAdvice.visible) { // Conditionally refresh AI advice
+    fetchAiAdvice();
+  }
 };
 
 const handleFormSubmit = async (formData) => {
@@ -483,7 +518,12 @@ const handleFormSubmit = async (formData) => {
       await api.post(endpoint, itemToSave);
     }
     closeModal();
-    fetchSummary(); // Refresh summary
+    fetchSummary();
+    fetchExpenseBreakdown();
+    fetchIncomeExpenseTrend();
+    if (aiAdvice.visible) { // Conditionally refresh AI advice
+      fetchAiAdvice();
+    }
 
     // Trigger re-render of the specific section by incrementing its key
     if (sectionKeys.hasOwnProperty(modalMode.value)) {
@@ -566,4 +606,19 @@ const handleFormSubmit = async (formData) => {
   overflow-y: auto; /* Add scroll for overflow */
 }
 
+.ai-advice-section {
+  background-color: #e9f5ff; /* A slightly different background for distinction */
+}
+.ai-advice-section .btn-primary {
+  margin-top: 0.5rem;
+}
+.ai-advice-content p {
+  white-space: pre-wrap; /* Ensures newlines from AI are respected */
+  font-style: italic;
+  background-color: #f8f9fa; /* Light background for the advice text itself */
+  padding: 1rem;
+  border-radius: 0.25rem;
+  border: 1px solid #dee2e6;
+  line-height: 1.7; /* More spacing for readability */
+}
 </style>

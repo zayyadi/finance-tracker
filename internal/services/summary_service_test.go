@@ -52,6 +52,24 @@ func seedDataForSummaryTest(t *testing.T, db *gorm.DB, dateForIncome time.Time, 
 	}
 }
 
+// seedFinancialSummary creates and stores a FinancialSummary record for testing.
+func seedFinancialSummary(t *testing.T, db *gorm.DB, summaryType string, forDateForPeriodCalc time.Time, totalIncome float64, totalExpenses float64) models.FinancialSummary {
+	periodStartDate, periodEndDate, err := CalculatePeriodDates(forDateForPeriodCalc, summaryType)
+	assert.NoError(t, err, "Failed to calculate period dates for seeding summary")
+
+	summary := models.FinancialSummary{
+		SummaryType:     summaryType,
+		PeriodStartDate: periodStartDate,
+		PeriodEndDate:   periodEndDate,
+		TotalIncome:     totalIncome,
+		TotalExpenses:   totalExpenses,
+		NetBalance:      totalIncome - totalExpenses,
+	}
+	errCreate := db.Create(&summary).Error
+	assert.NoError(t, errCreate, "Failed to seed financial summary: %+v", summary)
+	return summary
+}
+
 
 func TestCalculatePeriodDates(t *testing.T) {
 	loc, _ := time.LoadLocation("UTC") // Use a consistent timezone for tests
@@ -315,4 +333,109 @@ func TestGetOrCreateFinancialSummary_ViewInvalid(t *testing.T) {
 	_, err := service.GetOrCreateFinancialSummary("monthly", targetDate, "invalid_view")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid viewType 'invalid_view'")
+}
+
+// --- Tests for InvalidateSummariesForDate ---
+
+func TestInvalidateSummariesForDate(t *testing.T) {
+	itemDate := time.Date(2023, time.July, 15, 0, 0, 0, 0, time.UTC)
+	summaryTypesToInvalidate := []string{"monthly", "weekly", "yearly"}
+
+	// Calculate expected period start dates
+	monthlyStartDate, _, _ := CalculatePeriodDates(itemDate, "monthly")
+	weeklyStartDate, _, _ := CalculatePeriodDates(itemDate, "weekly")
+	yearlyStartDate, _, _ := CalculatePeriodDates(itemDate, "yearly")
+
+	t.Run("InvalidateExistingSummaries", func(t *testing.T) {
+		db := setupSummaryTestDB(t)
+		service := NewSummaryService(db)
+
+		// Seed summaries for the itemDate's periods
+		seedFinancialSummary(t, db, "monthly", itemDate, 1000, 500)
+		seedFinancialSummary(t, db, "weekly", itemDate, 200, 100)
+		seedFinancialSummary(t, db, "yearly", itemDate, 5000, 2000)
+		// Seed a summary for a different period that should NOT be deleted
+		otherDate := itemDate.AddDate(0, -2, 0) // Two months before
+		seedFinancialSummary(t, db, "monthly", otherDate, 100, 50)
+
+
+		err := service.InvalidateSummariesForDate(itemDate, summaryTypesToInvalidate)
+		assert.NoError(t, err)
+
+		// Verify targeted summaries are deleted
+		var count int64
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "monthly", monthlyStartDate).Count(&count)
+		assert.Equal(t, int64(0), count, "Monthly summary should be deleted")
+
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "weekly", weeklyStartDate).Count(&count)
+		assert.Equal(t, int64(0), count, "Weekly summary should be deleted")
+
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "yearly", yearlyStartDate).Count(&count)
+		assert.Equal(t, int64(0), count, "Yearly summary should be deleted")
+
+		// Verify the other summary still exists
+		otherMonthlyStartDate, _, _ := CalculatePeriodDates(otherDate, "monthly")
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "monthly", otherMonthlyStartDate).Count(&count)
+		assert.Equal(t, int64(1), count, "Other monthly summary should NOT be deleted")
+	})
+
+	t.Run("DateWithNoMatchingSummaries", func(t *testing.T) {
+		db := setupSummaryTestDB(t)
+		service := NewSummaryService(db)
+
+		nonExistentItemDate := time.Date(2020, time.January, 1, 0,0,0,0, time.UTC)
+
+		err := service.InvalidateSummariesForDate(nonExistentItemDate, summaryTypesToInvalidate)
+		assert.NoError(t, err, "Should not error if no summaries found to delete")
+
+		var count int64
+		db.Model(&models.FinancialSummary{}).Count(&count)
+		assert.Equal(t, int64(0), count, "No summaries should exist or be created")
+	})
+
+	t.Run("EmptySummaryPeriodTypesSlice", func(t *testing.T) {
+		db := setupSummaryTestDB(t)
+		service := NewSummaryService(db)
+
+		seededSummary := seedFinancialSummary(t, db, "monthly", itemDate, 100, 50)
+
+		err := service.InvalidateSummariesForDate(itemDate, []string{})
+		assert.NoError(t, err)
+
+		var count int64
+		db.Model(&models.FinancialSummary{}).Where("id = ?", seededSummary.ID).Count(&count)
+		assert.Equal(t, int64(1), count, "Summary should not be deleted for empty period types slice")
+	})
+
+	t.Run("SpecificPeriodTypeInvalidation", func(t *testing.T) {
+		db := setupSummaryTestDB(t)
+		service := NewSummaryService(db)
+
+		seedFinancialSummary(t, db, "monthly", itemDate, 100, 10)
+		seedFinancialSummary(t, db, "weekly", itemDate, 200, 20)
+		seedFinancialSummary(t, db, "yearly", itemDate, 300, 30)
+
+		err := service.InvalidateSummariesForDate(itemDate, []string{"monthly"})
+		assert.NoError(t, err)
+
+		var count int64
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "monthly", monthlyStartDate).Count(&count)
+		assert.Equal(t, int64(0), count, "Monthly summary should be deleted")
+
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "weekly", weeklyStartDate).Count(&count)
+		assert.Equal(t, int64(1), count, "Weekly summary should NOT be deleted")
+
+		db.Model(&models.FinancialSummary{}).Where("summary_type = ? AND period_start_date = ?", "yearly", yearlyStartDate).Count(&count)
+		assert.Equal(t, int64(1), count, "Yearly summary should NOT be deleted")
+	})
+
+	t.Run("ErrorInCalculatePeriodDates", func(t *testing.T) {
+		db := setupSummaryTestDB(t)
+		service := NewSummaryService(db)
+
+		err := service.InvalidateSummariesForDate(itemDate, []string{"invalid-type"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to calculate period for invalid-type")
+		assert.Contains(t, err.Error(), "invalid summary type: invalid-type")
+	})
 }

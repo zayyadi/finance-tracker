@@ -92,8 +92,8 @@ func main() {
 
 	// Instantiate handlers
 	// authHandler := handlers.NewAuthHandler(userService) // Removed AuthHandler
-	incomeHandler := handlers.NewIncomeHandler(incomeService)
-	expenseHandler := handlers.NewExpenseHandler(expenseService)
+	incomeHandler := handlers.NewIncomeHandler(incomeService, summaryService) // Added summaryService
+	expenseHandler := handlers.NewExpenseHandler(expenseService, summaryService) // Added summaryService
 	savingsHandler := handlers.NewSavingsHandler(savingsService)
 	debtHandler := handlers.NewDebtHandler(debtService)
 	summaryHandler := handlers.NewSummaryHandler(summaryService)
