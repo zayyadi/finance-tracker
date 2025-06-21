@@ -81,9 +81,17 @@ func (h *ExpenseHandler) ListExpensesHandler(c *gin.Context) {
 	}
 	offset := (page - 1) * limit
 
-	expenses, err := h.service.GetExpenses(offset, limit)
+	startDateStr := c.Query("startDate")
+	endDateStr := c.Query("endDate")
+
+	expenses, err := h.service.GetExpenses(offset, limit, startDateStr, endDateStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve expense records: " + err.Error()})
+		// Check if the error is due to date parsing to return a more specific client error
+		if strings.Contains(err.Error(), "invalid start date format") || strings.Contains(err.Error(), "invalid end date format") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve expense records: " + err.Error()})
+		}
 		return
 	}
 	c.JSON(http.StatusOK, expenses)

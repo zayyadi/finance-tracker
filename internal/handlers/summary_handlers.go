@@ -40,7 +40,14 @@ func (h *SummaryHandler) GetMonthlySummaryHandler(c *gin.Context) {
 		return
 	}
 
-	summary, err := h.service.GetOrCreateFinancialSummary("monthly", targetDate) // UserID removed
+	view := c.DefaultQuery("view", "overall")
+	allowedViews := map[string]bool{"overall": true, "income": true, "expenses": true, "savings": true, "debts": true}
+	if !allowedViews[view] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid view type specified"})
+		return
+	}
+
+	summary, err := h.service.GetOrCreateFinancialSummary("monthly", targetDate, view)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get or create monthly summary: " + err.Error()})
 		return
@@ -69,7 +76,14 @@ func (h *SummaryHandler) GetWeeklySummaryHandler(c *gin.Context) {
 		return
 	}
 
-	summary, err := h.service.GetOrCreateFinancialSummary("weekly", targetDate) // UserID removed
+	view := c.DefaultQuery("view", "overall")
+	allowedViews := map[string]bool{"overall": true, "income": true, "expenses": true, "savings": true, "debts": true}
+	if !allowedViews[view] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid view type specified"})
+		return
+	}
+
+	summary, err := h.service.GetOrCreateFinancialSummary("weekly", targetDate, view)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get or create weekly summary: " + err.Error()})
 		return
@@ -98,7 +112,14 @@ func (h *SummaryHandler) GetYearlySummaryHandler(c *gin.Context) {
 		return
 	}
 
-	summary, err := h.service.GetOrCreateFinancialSummary("yearly", targetDate) // UserID removed
+	view := c.DefaultQuery("view", "overall")
+	allowedViews := map[string]bool{"overall": true, "income": true, "expenses": true, "savings": true, "debts": true}
+	if !allowedViews[view] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid view type specified"})
+		return
+	}
+
+	summary, err := h.service.GetOrCreateFinancialSummary("yearly", targetDate, view)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get or create yearly summary: " + err.Error()})
 		return

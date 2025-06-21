@@ -5,16 +5,59 @@
 
     <!-- Financial Summary -->
     <section class="dashboard-section summary-section">
-      <h3>Financial Summary (Current Month)</h3>
+      <h3 style="text-transform: capitalize;">Financial Summary ({{ summaryFilters.periodType }} - {{ summaryFilters.viewType }})</h3>
+
+      <!-- Summary Filters -->
+      <div class="summary-filters-container" style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <div>
+          <label for="summaryPeriodType" style="display: block; margin-bottom: .25rem; font-size: 0.9em;">Period Type:</label>
+          <select id="summaryPeriodType" v-model="summaryFilters.periodType" @change="fetchSummary" class="form-control" style="width: auto; display: inline-block;">
+            <option value="monthly">Monthly</option>
+            <option value="weekly">Weekly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+
+        <div v-if="summaryFilters.periodType === 'monthly'">
+          <label for="summaryMonth" style="display: block; margin-bottom: .25rem; font-size: 0.9em;">Select Month:</label>
+          <input type="month" id="summaryMonth" v-model="summaryFilters.selectedMonth" @change="fetchSummary" class="form-control" style="width: auto; display: inline-block;">
+        </div>
+        <div v-if="summaryFilters.periodType === 'weekly'">
+          <label for="summaryWeekDate" style="display: block; margin-bottom: .25rem; font-size: 0.9em;">Select Date in Week:</label>
+          <input type="date" id="summaryWeekDate" v-model="summaryFilters.selectedDate" @change="fetchSummary" class="form-control" style="width: auto; display: inline-block;">
+        </div>
+        <div v-if="summaryFilters.periodType === 'yearly'">
+          <label for="summaryYear" style="display: block; margin-bottom: .25rem; font-size: 0.9em;">Select Year:</label>
+          <input type="number" id="summaryYear" v-model="summaryFilters.selectedYear" @change="fetchSummary" placeholder="YYYY" class="form-control" style="width: auto; display: inline-block;">
+        </div>
+
+        <div>
+          <label for="summaryViewType" style="display: block; margin-bottom: .25rem; font-size: 0.9em;">View Type:</label>
+          <select id="summaryViewType" v-model="summaryFilters.viewType" @change="fetchSummary" class="form-control" style="width: auto; display: inline-block;">
+            <option value="overall">Overall</option>
+            <option value="income">Income Only</option>
+            <option value="expenses">Expenses Only</option>
+            <!-- <option value="savings">Savings</option> -->
+            <!-- <option value="debts">Debts</option> -->
+          </select>
+        </div>
+      </div>
+
       <div v-if="summary.loading" class="loading-message">Loading summary...</div>
       <div v-if="summary.error" class="error-message">{{ summary.error }}</div>
       <div v-if="!summary.loading && !summary.error && summary.data">
-        <p>Total Income: <strong>{{ formatCurrency(summary.data.total_income) }}</strong></p>
-        <p>Total Expenses: <strong>{{ formatCurrency(summary.data.total_expenses) }}</strong></p>
-        <p>Net Balance: <strong>{{ formatCurrency(summary.data.net_balance) }}</strong></p>
+        <p v-if="summaryFilters.viewType === 'income' || summaryFilters.viewType === 'overall'">
+          Total Income: <strong>{{ formatCurrency(summary.data.total_income) }}</strong>
+        </p>
+        <p v-if="summaryFilters.viewType === 'expenses' || summaryFilters.viewType === 'overall'">
+          Total Expenses: <strong>{{ formatCurrency(summary.data.total_expenses) }}</strong>
+        </p>
+        <p v-if="summary.data.net_balance !== undefined"> <!-- Check if net_balance is part of the response -->
+          Net Balance: <strong>{{ formatCurrency(summary.data.net_balance) }}</strong>
+        </p>
       </div>
       <div v-if="!summary.loading && !summary.error && !summary.data && !summary.initialLoad">
-        No summary data available for the current month.
+        No summary data available for the selected period/view.
       </div>
     </section>
 
@@ -106,6 +149,15 @@ const summary = reactive({
   initialLoad: true, // To prevent "No data" message on initial load
 });
 
+const today = new Date();
+const summaryFilters = reactive({
+  periodType: 'monthly', // 'monthly', 'weekly', 'yearly'
+  selectedDate: today.toISOString().split('T')[0], // For daily/weekly, YYYY-MM-DD
+  selectedMonth: today.toISOString().substring(0, 7), // For monthly, YYYY-MM
+  selectedYear: today.getFullYear().toString(), // For yearly, YYYY
+  viewType: 'overall', // 'overall', 'income', 'expenses'
+});
+
 const expenseBreakdown = reactive({
   loading: false,
   error: null,
@@ -147,16 +199,29 @@ const formatCurrency = (value) => {
 const fetchSummary = async () => {
   summary.loading = true;
   summary.error = null;
-  summary.initialLoad = false;
+  summary.initialLoad = false; // Keep this to manage "No data" message
+
+  let endpoint = `/summary/${summaryFilters.periodType}`;
+  let dateParam = '';
+
+  if (summaryFilters.periodType === 'monthly') {
+    dateParam = summaryFilters.selectedMonth; // YYYY-MM
+  } else if (summaryFilters.periodType === 'weekly') {
+    dateParam = summaryFilters.selectedDate; // YYYY-MM-DD
+  } else if (summaryFilters.periodType === 'yearly') {
+    dateParam = summaryFilters.selectedYear; // YYYY
+  }
+
+  if (!dateParam && (summaryFilters.periodType === 'monthly' || summaryFilters.periodType === 'weekly' || summaryFilters.periodType === 'yearly')) {
+    summary.error = "Please select a valid date/period.";
+    summary.loading = false;
+    summary.data = null;
+    return;
+  }
+
   try {
-    // Assuming your Go API endpoint for monthly summary is /api/v1/summary/monthly
-    // It expects a "date" query parameter in "YYYY-MM" format.
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = (today.getMonth() + 1).toString().padStart(2, '0'); // JavaScript months are 0-indexed
-    const dateParam = `${year}-${month}`;
-    const response = await api.get(`/summary/monthly?date=${dateParam}`);
-    summary.data = response.data; // Corrected: API returns the summary object directly
+    const response = await api.get(`${endpoint}?date=${dateParam}&view=${summaryFilters.viewType}`);
+    summary.data = response.data;
   } catch (err) {
     console.error("Error fetching summary:", err);
     summary.error = "Failed to load financial summary. " + (err.response?.data?.error || err.message);
@@ -215,7 +280,20 @@ const pieChartData = computed(() => {
     labels: expenseBreakdown.data.map(item => item.category),
     datasets: [
       {
-        backgroundColor: ['#41B883', '#E46651', '#00D8FF', '#DD1B16', '#FFC107', '#607D8B', '#FF9800', '#8BC34A', '#03A9F4', '#9C27B0'],
+        backgroundColor: [
+          '#4A90E2', // Primary Blue
+          '#50E3C2', // Teal/Turquoise
+          '#F5A623', // Orange
+          '#BD10E0', // Purple
+          '#7ED321', // Lime Green
+          '#4A4A4A', // Dark Gray
+          '#E0E0E0', // Light Gray
+          '#F8E71C', // Yellow
+          '#D0021B', // Red
+          '#007bff'  // Another Blue
+        ],
+        borderColor: '#FFFFFF',
+        borderWidth: 2,
         data: expenseBreakdown.data.map(item => item.total_amount),
       },
     ],
@@ -227,11 +305,38 @@ const pieChartOptions = ref({
   maintainAspectRatio: false,
   plugins: {
     legend: {
-      position: 'top',
+      position: 'bottom', // Or 'top', depending on space and preference
+      labels: {
+        font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }, // Consistent font
+        padding: 20, // Add padding to legend items
+      }
     },
     title: {
-      display: false,
-      text: 'Expense Breakdown by Category'
+      display: true, // Display chart title (already has section title, but can be more specific)
+      text: 'Expense Breakdown by Category',
+      font: {
+        size: 16,
+        family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      },
+      padding: { top: 10, bottom: 10 }
+    },
+    tooltip: {
+      backgroundColor: '#4A4A4A', // Darker tooltip background
+      titleFont: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', size: 14 },
+      bodyFont: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', size: 12 },
+      callbacks: {
+        label: function(context) {
+          let label = context.label || '';
+          if (label) {
+            label += ': ';
+          }
+          if (context.parsed !== null) {
+            // Assuming formatCurrency is accessible here or define a similar one
+            label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed);
+          }
+          return label;
+        }
+      }
     }
   }
 });
@@ -246,12 +351,16 @@ const barChartData = computed(() => {
     datasets: [
       {
         label: 'Total Income',
-        backgroundColor: '#41B883',
+        backgroundColor: '#28a745', // Green (from new palette for success/income)
+        borderColor: '#28a745',
+        borderWidth: 1,
         data: incomeExpenseTrend.data.map(item => item.total_income),
       },
       {
         label: 'Total Expenses',
-        backgroundColor: '#E46651',
+        backgroundColor: '#dc3545', // Red (from new palette for error/expense)
+        borderColor: '#dc3545',
+        borderWidth: 1,
         data: incomeExpenseTrend.data.map(item => item.total_expenses),
       },
     ],
@@ -264,15 +373,59 @@ const barChartOptions = ref({
   plugins: {
     legend: {
       position: 'top',
+      labels: {
+        font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' },
+        padding: 10,
+      }
     },
     title: {
-      display: false,
-      text: 'Income vs. Expense Trend'
+      display: true,
+      text: 'Monthly Income vs. Expense Trend',
+      font: {
+        size: 16,
+        family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      },
+      padding: { top: 10, bottom: 20 } // More bottom padding for title
+    },
+    tooltip: {
+      backgroundColor: '#4A4A4A',
+      titleFont: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', size: 14 },
+      bodyFont: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', size: 12 },
+      callbacks: {
+        label: function(context) {
+          let label = context.dataset.label || '';
+          if (label) {
+            label += ': ';
+          }
+          if (context.parsed.y !== null) {
+            label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+          }
+          return label;
+        }
+      }
     }
   },
   scales: {
     y: {
-      beginAtZero: true
+      beginAtZero: true,
+      grid: {
+        color: '#e0e0e0', // Lighter grid lines
+        borderColor: '#cccccc' // Border for the axis line
+      },
+      ticks: {
+        font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' },
+        callback: function(value) { // Format Y-axis ticks as currency
+          return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+        }
+      }
+    },
+    x: {
+      grid: {
+        display: false // Hide vertical grid lines for a cleaner look
+      },
+      ticks: {
+        font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }
+      }
     }
   }
 });

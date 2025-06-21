@@ -1,23 +1,90 @@
+/* Styles for sections within the dashboard */
 .dashboard-section {
-  background-color: #f9f9f9;
-  border: 1px solid #e0e0e0;
-  padding: 15px;
-  margin-bottom: 20px;
-  border-radius: 5px;
+  background-color: #ffffff; /* New background */
+  border: 1px solid #dee2e6; /* Subtle border */
+  padding: 1.5rem; /* Consistent padding */
+  margin-bottom: 1.5rem; /* Standardized margin */
+  border-radius: 0.25rem; /* Existing radius, can be adjusted if needed */
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); /* Light box-shadow */
 }
-.dashboard-section h3 { margin-top: 0; color: #333; }
-.item-list { list-style: none; padding: 0; }
-.list-item { background-color: #fff; border: 1px solid #ddd; padding: 10px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-.list-item div:first-child { flex-grow: 1; }
-.list-item small { display: block; color: #555; font-size: 0.9em; margin-top: 4px;}
-.list-item .actions { white-space: nowrap; }
-.list-item .actions .btn { margin-left: 8px; padding: 5px 8px; }
 
-.add-btn { background-color: #5cb85c; color: white; margin-bottom: 10px; }
-.add-btn:hover { background-color: #4cae4c; }
-.edit-btn { background-color: #f0ad4e; color: white; }
-.edit-btn:hover { background-color: #ec971f; }
-.delete-btn { background-color: #d9534f; color: white; }
-.delete-btn:hover { background-color: #c9302c; }
+.dashboard-section h3 {
+  font-size: 1.25rem; /* Standardized font size */
+  color: #4A90E2; /* Primary color for section titles */
+  margin-bottom: 1rem; /* Space below heading */
+  font-weight: 500; /* Standardized font weight */
+}
 
-.btn { /* Ensure .btn is defined if not already in main.css */ }
+/* Item List Styling */
+.item-list {
+  list-style-type: none;
+  padding: 0;
+  margin: 0; /* Remove any default margins */
+}
+
+.list-item {
+  background-color: #fdfdfd; /* Slightly off-white for items */
+  border: 1px solid #eee;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem; /* Space between items */
+  border-radius: 0.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; /* Allow actions to wrap on smaller screens if needed */
+}
+
+.list-item > span:first-child { /* Target the main content span */
+  flex-grow: 1; /* Allow text content to take available space */
+  margin-right: 1rem; /* Space before action buttons */
+}
+
+
+.list-item small {
+  color: #6c757d; /* Bootstrap's text-muted color */
+  display: block; /* Ensure it takes its own line if needed */
+  font-size: 0.875em;
+  margin-top: 0.25rem; /* Space above note if main content wraps */
+  width: 100%; /* Ensure it spans full width if it wraps */
+}
+
+.list-item .actions {
+  display: flex; /* Align buttons in a row */
+  gap: 0.5rem; /* Space between buttons in the actions group */
+  flex-shrink: 0; /* Prevent action buttons from shrinking too much */
+}
+
+/* Specific styles for buttons within .list-item .actions were previously here. */
+/* They are now handled by global .btn, .edit-btn, .delete-btn in main.css. */
+/* Ensure those global styles provide adequate padding/margin or adjust if needed. */
+/* For example, if less margin is needed for buttons inside lists: */
+/* .list-item .actions .btn { margin-right: 0; margin-left: 0.5rem; } */
+/* However, the current global .btn already has margin-right and margin-bottom. */
+/* The `gap` property on .actions should handle spacing well. */
+
+/* Styles for sections in Dashboard.vue like Summary and Analytics that don't use item-list */
+.summary-section p {
+  margin: 0.5em 0;
+  font-size: 1rem;
+  color: #333;
+}
+.summary-section strong {
+  color: #2c3e50; /* Darker color for emphasis */
+  font-weight: 600;
+}
+
+.analytics-section .analytics-chart {
+  margin-top: 1.5rem; /* Consistent spacing */
+  padding: 1rem; /* Consistent padding */
+  border: 1px solid #e9ecef; /* Light border for charts */
+  border-radius: 0.25rem;
+  background-color: #f8f9fa; /* Light background for chart containers */
+}
+
+.analytics-section .analytics-chart h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem; /* Slightly smaller than section h3 */
+  color: #343a40; /* Darker heading for charts */
+  font-weight: 500;
+}

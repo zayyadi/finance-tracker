@@ -1,11 +1,16 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
-    <div class="modal-content">
-      <h4>{{ modalTitle }}</h4>
-      <form @submit.prevent="submitForm">
-        <div v-if="internalError" class="error-message">{{ internalError }}</div>
+    <div class="modal-container"> <!-- Changed from modal-content -->
+      <div class="modal-header">
+        <h3>{{ modalTitle }}</h3> <!-- Changed h4 to h3 to match new CSS -->
+        <button @click="$emit('close')" class="modal-close-btn" aria-label="Close modal">&times;</button>
+      </div>
 
-        <!-- Common fields for Income/Expense -->
+      <div class="modal-body">
+        <form @submit.prevent="submitForm" id="modalMainForm">
+          <div v-if="internalError" class="error-message modal-error-message">{{ internalError }}</div>
+
+          <!-- Common fields for Income/Expense -->
         <template v-if="mode === 'income' || mode === 'expenses'">
           <div>
             <label :for="mode + '-amount'">Amount:</label>
@@ -77,19 +82,23 @@
           </div>
         </template>
 
-        <div class="modal-actions">
-          <button type="submit" class="btn save-btn" :disabled="props.processing || localLoading">
-            <span v-if="props.processing || localLoading">Saving...</span>
-            <span v-else>Save</span>
-          </button>
-          <button type="button" class="btn cancel-btn" @click="$emit('close')" :disabled="props.processing || localLoading">Cancel</button>
-        </div>
-      </form>
+          <!-- Form-level actions moved into modal-footer -->
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" @click="$emit('close')" :disabled="props.processing || localLoading">Cancel</button>
+        <button type="submit" form="modalMainForm" class="btn btn-primary" :disabled="props.processing || localLoading">
+          <span v-if="props.processing || localLoading">Saving...</span>
+          <span v-else>Save</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
+// Add id="modalMainForm" to the <form> tag
+// The script part does not need changes for this subtask, only template and style import.
 import { ref, watch, computed, defineProps, defineEmits, toRefs } from 'vue';
 
 const props = defineProps({
@@ -142,34 +151,13 @@ const submitForm = () => {
   // localLoading.value = false;
 };
 
+// It's important to add an id to the form tag to link the submit button if it's outside the form.
+// e.g., <form @submit.prevent="submitForm" id="modalMainForm">
+// This is handled in the template change.
 </script>
 
-<style scoped>
-/* Styles previously in modal-styles.css are now inlined here */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 2000;}
-.modal-content { background-color: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
-.modal-content h4 { margin-top: 0; margin-bottom: 20px; color: #333; }
-.modal-content form div { margin-bottom: 15px; }
-.modal-content label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
-.modal-content input[type="number"],
-.modal-content input[type="text"],
-.modal-content input[type="date"],
-.modal-content textarea,
-.modal-content select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box; /* Important for width calculation */
-}
-.modal-content textarea { min-height: 80px; resize: vertical; }
-.modal-actions { margin-top: 20px; text-align: right; }
-.modal-actions .btn { margin-left: 10px; }
-.save-btn { background-color: #5cb85c; color: white; }
-.save-btn:hover { background-color: #4cae4c; }
-.cancel-btn { background-color: #aaa; color: white; }
-.cancel-btn:hover { background-color: #888; }
-</style>
+<style scoped src="../assets/modal-styles.css"></style>
+<!-- Removed inlined styles, now using external modal-styles.css -->
 ```
 
 **i. `frontend/src/services/api.js`**

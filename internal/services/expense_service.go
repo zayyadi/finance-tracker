@@ -56,22 +56,42 @@ func (s *ExpenseService) GetExpenseByID(expenseID uint) (*models.Expense, error)
 	return &expense, nil
 }
 
-// GetExpenses retrieves all expense records with pagination.
-func (s *ExpenseService) GetExpenses(offset int, limit int) ([]models.Expense, error) {
+// GetExpenses retrieves expense records, optionally filtered by date range, with pagination.
+func (s *ExpenseService) GetExpenses(offset int, limit int, startDateStr, endDateStr string) ([]models.Expense, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("database connection not initialized in ExpenseService")
 	}
 	var expenses []models.Expense
-	result := s.DB.Offset(offset).Limit(limit). // Removed userID condition
-							Order("date desc, created_at desc").
-							Find(&expenses)
+	query := s.DB.Model(&models.Expense{})
+	var parsedStartDate, parsedEndDate time.Time // Declare here to be in scope for logging
+	var err error
+
+	if startDateStr != "" && endDateStr != "" {
+		parsedStartDate, err = time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			log.Printf("Error parsing start date '%s': %v", startDateStr, err)
+			return nil, fmt.Errorf("invalid start date format: %w", err)
+		}
+		parsedEndDate, err = time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			log.Printf("Error parsing end date '%s': %v", endDateStr, err)
+			return nil, fmt.Errorf("invalid end date format: %w", err)
+		}
+		query = query.Where("date BETWEEN ? AND ?", parsedStartDate.Format("2006-01-02"), parsedEndDate.Format("2006-01-02"))
+	}
+
+	// Apply ordering and pagination to the original query object
+	result := query.Order("date desc, created_at desc").
+		Offset(offset).
+		Limit(limit).
+		Find(&expenses)
 
 	if result.Error != nil {
 		log.Printf("Error retrieving expenses: %v", result.Error)
 		return nil, fmt.Errorf("could not retrieve expenses: %w", result.Error)
 	}
 	if expenses == nil {
-		return []models.Expense{}, nil
+		return []models.Expense{}, nil // Return empty slice if no records found
 	}
 	return expenses, nil
 }
