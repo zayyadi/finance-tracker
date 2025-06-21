@@ -5,12 +5,12 @@
     <button @click="$emit('openModal', 'income')" class="btn add-btn">Add Income</button>
     
     <ul v-if="items.length > 0" class="item-list">
-      <li v-for="item in items" :key="item.id" class="list-item">
+      <li v-for="item in items" :key="item.ID" class="list-item"> <!-- Changed item.id to item.ID -->
         <span>{{ formatDate(item.date) }} - {{ item.category }}: {{ formatCurrency(item.amount) }}</span>
         <small v-if="item.note">({{ item.note }})</small>
         <div class="actions">
           <button @click="$emit('openModal', 'income', item)" class="btn edit-btn">Edit</button>
-          <button @click="deleteIncomeItem(item.id)" class="btn delete-btn">Delete</button>
+          <button @click="deleteIncomeItem(item.ID)" class="btn delete-btn">Delete</button> <!-- Changed item.id to item.ID -->
         </div>
       </li>
     </ul>

@@ -24,7 +24,9 @@ import (
 func setupSavingsTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	gin.SetMode(gin.TestMode)
 
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	// Use a unique DSN for each test to ensure isolation
+	dsn := fmt.Sprintf("file:savings_handler_%s_%d?mode=memory&cache=shared", t.Name(), time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	assert.NoError(t, err, "Failed to connect to in-memory SQLite")
 
 	sqlDB, err := db.DB()
@@ -52,8 +54,8 @@ func setupSavingsTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	// Register only the routes needed for these tests
 	router.POST("/savings", savingsHandler.CreateSavingsHandler)
 	router.PUT("/savings/:id", savingsHandler.UpdateSavingsHandler)
-	// Add GET /savings/:id if needed for easy verification, though direct DB check is also good
 	router.GET("/savings/:id", savingsHandler.GetSavingsHandler)
+	router.DELETE("/savings/:id", savingsHandler.DeleteSavingsHandler) // Added missing DELETE route
 
 
 	return router, db
@@ -236,4 +238,116 @@ func TestUpdateSavingsHandler_SetDateToNull(t *testing.T) {
     // After JSON unmarshalling `null` into a *database.CustomDate, the pointer might be non-nil
     // but point to a CustomDate with a zero Time.
     assert.True(t, updatedGoalResp.TargetDate == nil || updatedGoalResp.TargetDate.Time.IsZero(), "TargetDate should be effectively nil in response after update to null")
+}
+
+var invalidSavingsIDs = []string{"not-a-number", " ", "1.0", "1a2b", "-1", "0"}
+
+func TestGetSavingsHandler_InvalidIDFormat(t *testing.T) {
+	router, _ := setupSavingsTestRouter(t)
+
+	for _, invalidID := range invalidSavingsIDs {
+		t.Run(fmt.Sprintf("ID_%s", invalidID), func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/savings/"+invalidID, nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code, "Expected BadRequest for ID: "+invalidID)
+
+			var jsonResponse map[string]string
+			err := json.Unmarshal(rr.Body.Bytes(), &jsonResponse)
+			assert.NoError(t, err, "Failed to unmarshal error response for ID: "+invalidID)
+			assert.Contains(t, jsonResponse["error"], "Invalid savings ID format", "Expected error message for ID: "+invalidID)
+		})
+	}
+}
+
+func TestUpdateSavingsHandler_InvalidIDFormat(t *testing.T) {
+	router, _ := setupSavingsTestRouter(t)
+
+	for _, invalidID := range invalidSavingsIDs {
+		t.Run(fmt.Sprintf("ID_%s", invalidID), func(t *testing.T) {
+			payload := bytes.NewBufferString(`{"notes": "test update"}`)
+			req, _ := http.NewRequest("PUT", "/savings/"+invalidID, payload)
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code, "Expected BadRequest for ID: "+invalidID)
+
+			var jsonResponse map[string]string
+			err := json.Unmarshal(rr.Body.Bytes(), &jsonResponse)
+			assert.NoError(t, err, "Failed to unmarshal error response for ID: "+invalidID)
+			assert.Contains(t, jsonResponse["error"], "Invalid savings ID format", "Expected error message for ID: "+invalidID)
+		})
+	}
+}
+
+func TestDeleteSavingsHandler_InvalidIDFormat(t *testing.T) {
+	router, _ := setupSavingsTestRouter(t)
+
+	for _, invalidID := range invalidSavingsIDs {
+		t.Run(fmt.Sprintf("ID_%s", invalidID), func(t *testing.T) {
+			req, _ := http.NewRequest("DELETE", "/savings/"+invalidID, nil)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusBadRequest, rr.Code, "Expected BadRequest for ID: "+invalidID)
+
+			var jsonResponse map[string]string
+			err := json.Unmarshal(rr.Body.Bytes(), &jsonResponse)
+			assert.NoError(t, err, "Failed to unmarshal error response for ID: "+invalidID)
+			assert.Contains(t, jsonResponse["error"], "Invalid savings ID format", "Expected error message for ID: "+invalidID)
+		})
+	}
+}
+
+func TestGetSavingsHandler_ValidIDFormat_PassesParsing(t *testing.T) {
+	router, db := setupSavingsTestRouter(t)
+	dummySavings := models.Savings{GoalName:"Test", GoalAmount: 100}
+	db.Create(&dummySavings)
+	validID := strconv.Itoa(int(dummySavings.ID))
+
+	req, _ := http.NewRequest("GET", "/savings/"+validID, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.NotEqual(t, http.StatusBadRequest, rr.Code, "Expected not BadRequest for valid ID: "+validID)
+	assert.Condition(t, func() bool {
+		return rr.Code == http.StatusOK || rr.Code == http.StatusNotFound
+	}, "Expected StatusOK or StatusNotFound for valid ID %s, but got %d", validID, rr.Code)
+}
+
+func TestUpdateSavingsHandler_ValidIDFormat_PassesParsing(t *testing.T) {
+	router, db := setupSavingsTestRouter(t)
+	dummySavings := models.Savings{GoalName:"Test", GoalAmount: 100}
+	db.Create(&dummySavings)
+	validID := strconv.Itoa(int(dummySavings.ID))
+
+	payload := bytes.NewBufferString(`{"notes": "test update for valid id"}`)
+	req, _ := http.NewRequest("PUT", "/savings/"+validID, payload)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.NotEqual(t, http.StatusBadRequest, rr.Code, "Expected not BadRequest for valid ID: "+validID)
+	assert.Condition(t, func() bool {
+		return rr.Code == http.StatusOK || rr.Code == http.StatusNotFound
+	}, "Expected StatusOK or StatusNotFound for valid ID %s, but got %d", validID, rr.Code)
+}
+
+func TestDeleteSavingsHandler_ValidIDFormat_PassesParsing(t *testing.T) {
+	router, db := setupSavingsTestRouter(t)
+	dummySavings := models.Savings{GoalName:"Test", GoalAmount: 100}
+	db.Create(&dummySavings)
+	validID := strconv.Itoa(int(dummySavings.ID))
+
+	req, _ := http.NewRequest("DELETE", "/savings/"+validID, nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	assert.NotEqual(t, http.StatusBadRequest, rr.Code, "Expected not BadRequest for valid ID: "+validID)
+	assert.Condition(t, func() bool {
+		return rr.Code == http.StatusNoContent || rr.Code == http.StatusNotFound
+	}, "Expected StatusNoContent or StatusNotFound for valid ID %s, but got %d", validID, rr.Code)
 }

@@ -471,9 +471,9 @@ const handleFormSubmit = async (formData) => {
 
   // Backend might not expect 'id' on create, and needs it in path for update
   let itemId = null;
-  if (isEditingModal.value && itemToSave.id) {
-    itemId = itemToSave.id;
-    // delete itemToSave.id; // Some backends prefer ID not in payload for PUT
+  if (isEditingModal.value && itemToSave.ID) { // Changed itemToSave.id to itemToSave.ID
+    itemId = itemToSave.ID;
+    // delete itemToSave.ID; // Some backends prefer ID not in payload for PUT. Consider this if issues arise.
   }
 
   try {

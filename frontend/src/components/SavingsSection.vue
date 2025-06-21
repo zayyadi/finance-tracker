@@ -5,7 +5,7 @@
     <button @click="$emit('openModal', 'savings')" class="btn add-btn">Add Savings Goal</button>
     
     <ul v-if="items.length > 0" class="item-list">
-      <li v-for="item in items" :key="item.id" class="list-item">
+      <li v-for="item in items" :key="item.ID" class="list-item"> <!-- Changed item.id to item.ID -->
         <div>
           <strong>{{ item.goal_name }}</strong><br>
           Target: {{ formatCurrency(item.goal_amount) }}, Current: {{ formatCurrency(item.current_amount) }}<br>
@@ -14,7 +14,7 @@
         </div>
         <div class="actions">
           <button @click="$emit('openModal', 'savings', item)" class="btn edit-btn">Edit</button>
-          <button @click="deleteSavingsItem(item.id)" class="btn delete-btn">Delete</button>
+          <button @click="deleteSavingsItem(item.ID)" class="btn delete-btn">Delete</button> <!-- Changed item.id to item.ID -->
         </div>
       </li>
     </ul>

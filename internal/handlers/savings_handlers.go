@@ -63,6 +63,10 @@ func (h *SavingsHandler) GetSavingsHandler(c *gin.Context) {
 		return
 	}
 	savingsID := uint(savingsIDUint64)
+	if savingsID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid savings ID format"})
+		return
+	}
 
 	savings, err := h.service.GetSavingsByID(savingsID)
 	if err != nil {
@@ -109,6 +113,10 @@ func (h *SavingsHandler) UpdateSavingsHandler(c *gin.Context) {
 		return
 	}
 	savingsID := uint(savingsIDUint64)
+	if savingsID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid savings ID format"})
+		return
+	}
 
 	var req models.SavingsUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -143,6 +151,10 @@ func (h *SavingsHandler) DeleteSavingsHandler(c *gin.Context) {
 		return
 	}
 	savingsID := uint(savingsIDUint64)
+	if savingsID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid savings ID format"})
+		return
+	}
 
 	err = h.service.DeleteSavings(savingsID)
 	if err != nil {
