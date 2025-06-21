@@ -29,62 +29,105 @@ func NewSummaryService(db *gorm.DB) *SummaryService {
 	return &SummaryService{DB: db}
 }
 
-// GetOrCreateFinancialSummary fetches an existing summary or generates a new one.
-func (s *SummaryService) GetOrCreateFinancialSummary(summaryType string, targetDate time.Time) (*models.FinancialSummary, error) {
+// GetOrCreateFinancialSummary fetches an existing summary or generates a new one based on viewType.
+// viewType can be "overall", "income", "expenses". Other types are not yet implemented.
+// Overall summaries are fetched from/stored in DB. View-specific summaries are calculated on the fly.
+func (s *SummaryService) GetOrCreateFinancialSummary(summaryType string, targetDate time.Time, viewType string) (*models.FinancialSummary, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("database connection not initialized in SummaryService")
 	}
 
+	if viewType == "" {
+		viewType = "overall" // Default to overall
+	}
+
 	periodStartDate, periodEndDate, err := CalculatePeriodDates(targetDate, summaryType)
 	if err != nil {
-		return nil, fmt.Errorf("erhttps://docs.google.com/forms/d/e/1FAIpQLSfAdZXGGMT716G9Gfz7884A8ywZPAH2NRoENLwEpiJJoHBo4Q/viewform?s=35ror calculating period dates: %w", err)
+		// Corrected the error message from the original code that had a URL in it.
+		return nil, fmt.Errorf("error calculating period dates: %w", err)
 	}
 
-	summary, err := s.fetchSummaryFromDB(summaryType, periodStartDate) // Removed userID
-	if err == nil && summary != nil {
-		return summary, nil
-	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Printf("Error fetching existing summary, type %s, date %s: %v", summaryType, periodStartDate.Format("2006-01-02"), err)
-		return nil, fmt.Errorf("error retrieving existing summary: %w", err)
+	// Handle "overall" view - fetch from DB or calculate and store
+	if viewType == "overall" {
+		summary, err := s.fetchSummaryFromDB(summaryType, periodStartDate)
+		if err == nil && summary != nil {
+			return summary, nil // Found existing overall summary
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("Error fetching existing summary (overall), type %s, date %s: %v", summaryType, periodStartDate.Format("2006-01-02"), err)
+			return nil, fmt.Errorf("error retrieving existing overall summary: %w", err)
+		}
+
+		// Existing overall summary not found, calculate it
+		totalIncome, errIncome := s.calculateTotalForPeriodGORM(0, periodStartDate, periodEndDate, &models.Income{})
+		if errIncome != nil {
+			return nil, fmt.Errorf("error calculating total income for overall summary: %w", errIncome)
+		}
+		totalExpenses, errExpenses := s.calculateTotalForPeriodGORM(0, periodStartDate, periodEndDate, &models.Expense{})
+		if errExpenses != nil {
+			return nil, fmt.Errorf("error calculating total expenses for overall summary: %w", errExpenses)
+		}
+		netBalance := totalIncome - totalExpenses
+
+		newSummary := &models.FinancialSummary{
+			SummaryType:     summaryType,
+			PeriodStartDate: periodStartDate,
+			PeriodEndDate:   periodEndDate,
+			TotalIncome:     totalIncome,
+			TotalExpenses:   totalExpenses,
+			NetBalance:      netBalance,
+		}
+		// Attempt to store the new overall summary
+		storedSummary, storeErr := s.storeSummaryInDB(newSummary)
+		if storeErr != nil {
+			// Handle potential race condition where another request created the summary in the meantime
+			if strings.Contains(storeErr.Error(), "duplicate key value violates unique constraint") &&
+				strings.Contains(storeErr.Error(), "idx_type_period") {
+				log.Printf("Unique constraint violation for overall summary type %s, date %s during store. Re-fetching.", summaryType, periodStartDate.Format("2006-01-02"))
+				return s.fetchSummaryFromDB(summaryType, periodStartDate)
+			}
+			log.Printf("Error storing new overall summary type %s, date %s: %v", summaryType, periodStartDate.Format("2006-01-02"), storeErr)
+			return nil, fmt.Errorf("error storing new overall summary: %w", storeErr)
+		}
+		return storedSummary, nil
 	}
 
-	totalIncome, err := s.calculateTotalForPeriodGORM(0, periodStartDate, periodEndDate, &models.Income{}) // Removed userID
-	if err != nil {
-		return nil, fmt.Errorf("error calculating total income: %w", err)
+	// Handle view-specific calculations (not stored in DB)
+	var totalIncome float64
+	var totalExpenses float64
+	var calcErr error
+
+	if viewType == "income" {
+		totalIncome, calcErr = s.calculateTotalForPeriodGORM(0, periodStartDate, periodEndDate, &models.Income{})
+		totalExpenses = 0 // Expenses are zero for income-only view
+	} else if viewType == "expenses" {
+		totalIncome = 0 // Income is zero for expenses-only view
+		totalExpenses, calcErr = s.calculateTotalForPeriodGORM(0, periodStartDate, periodEndDate, &models.Expense{})
+	} else if viewType == "savings" || viewType == "debts" {
+		// Placeholder for future implementation
+		return nil, fmt.Errorf("viewType '%s' not yet implemented", viewType)
+	} else {
+		return nil, fmt.Errorf("invalid viewType '%s'", viewType)
 	}
 
-	totalExpenses, err := s.calculateTotalForPeriodGORM(0, periodStartDate, periodEndDate, &models.Expense{}) // Removed userID
-	if err != nil {
-		return nil, fmt.Errorf("error calculating total expenses: %w", err)
+	if calcErr != nil {
+		return nil, fmt.Errorf("error calculating totals for view '%s': %w", viewType, calcErr)
 	}
 
 	netBalance := totalIncome - totalExpenses
-
-	newSummary := &models.FinancialSummary{
-		// UserID:          userID, // Removed
-		SummaryType:     summaryType,
+	// Create a non-persistent FinancialSummary object for the specific view
+	viewSummary := &models.FinancialSummary{
+		SummaryType:     summaryType, // Could also add viewType to SummaryType string if needed for frontend
 		PeriodStartDate: periodStartDate,
 		PeriodEndDate:   periodEndDate,
 		TotalIncome:     totalIncome,
 		TotalExpenses:   totalExpenses,
 		NetBalance:      netBalance,
 	}
-
-	storedSummary, err := s.storeSummaryInDB(newSummary)
-	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") &&
-			strings.Contains(err.Error(), "idx_type_period") { // Updated unique index name
-			log.Printf("Unique constraint violation for summary type %s, date %s. Attempting to re-fetch.", summaryType, periodStartDate.Format("2006-01-02"))
-			return s.fetchSummaryFromDB(summaryType, periodStartDate) // Removed userID
-		}
-		log.Printf("Error storing new summary type %s, date %s: %v", summaryType, periodStartDate.Format("2006-01-02"), err)
-		return nil, fmt.Errorf("error storing new summary: %w", err)
-	}
-	return storedSummary, nil
+	return viewSummary, nil
 }
 
-func (s *SummaryService) fetchSummaryFromDB(summaryType string, periodStartDate time.Time) (*models.FinancialSummary, error) { // Removed userID
+func (s *SummaryService) fetchSummaryFromDB(summaryType string, periodStartDate time.Time) (*models.FinancialSummary, error) {
 	var summary models.FinancialSummary
 	result := s.DB.Where("summary_type = ? AND period_start_date = ?", summaryType, periodStartDate).First(&summary) // Removed userID
 	if result.Error != nil {

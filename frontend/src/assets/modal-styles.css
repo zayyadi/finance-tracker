@@ -1,23 +1,98 @@
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 2000;}
-.modal-content { background-color: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
-.modal-content h4 { margin-top: 0; margin-bottom: 20px; color: #333; }
-.modal-content form div { margin-bottom: 15px; }
-.modal-content label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
-.modal-content input[type="number"],
-.modal-content input[type="text"],
-.modal-content input[type="date"],
-.modal-content textarea,
-.modal-content select {
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box; /* Important for width calculation */
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6); /* Darker overlay for better focus */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* Ensure it's above other content */
 }
-.modal-content textarea { min-height: 80px; resize: vertical; }
-.modal-actions { margin-top: 20px; text-align: right; }
-.modal-actions .btn { margin-left: 10px; }
-.save-btn { background-color: #5cb85c; color: white; }
-.save-btn:hover { background-color: #4cae4c; }
-.cancel-btn { background-color: #aaa; color: white; }
-.cancel-btn:hover { background-color: #888; }
+
+.modal-container { /* Renamed from modal-content for clarity if needed, or keep modal-content */
+  background-color: #ffffff;
+  padding: 2rem; /* Increased padding */
+  border-radius: 0.5rem; /* Slightly larger radius */
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); /* Standardized shadow */
+  width: 90%;
+  max-width: 500px; /* Max width for larger screens */
+  position: relative; /* For absolute positioning of close button */
+  max-height: 90vh; /* Prevent modal from being too tall */
+  overflow-y: auto; /* Allow scrolling for tall content */
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #dee2e6; /* Standard border color */
+}
+
+.modal-header h3 { /* Assuming the title is an h3 */
+  font-size: 1.5rem;
+  color: #333; /* Darker color for title */
+  font-weight: 500;
+  margin-bottom: 0; /* Reset margin from global h3 */
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.75rem; /* Larger for easier clicking */
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  color: #6c757d; /* Secondary text color */
+  padding: 0.5rem; /* Add some padding to make it easier to click */
+  margin: -0.5rem; /* Counteract padding to align visually */
+}
+.modal-close-btn:hover {
+  color: #343a40; /* Darker on hover */
+}
+/* For absolute positioning of close button: */
+/* .modal-header .modal-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+} */
+
+
+.modal-body {
+  margin-bottom: 1.5rem; /* Space before footer */
+}
+/* Form elements inside .modal-body will pick up global styles from main.css */
+/* e.g., input, select, textarea, label */
+/* Add specific adjustments if needed: */
+.modal-body .form-group {
+  margin-bottom: 1rem; /* Consistent spacing for form groups */
+}
+.modal-body .form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end; /* Align buttons to the right */
+  gap: 0.75rem; /* Space between buttons */
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6; /* Standard border color */
+}
+
+/* Buttons in footer will use .btn, .btn-primary, .btn-secondary, etc. from main.css */
+/* Example:
+.modal-footer .btn-primary { ... }
+.modal-footer .btn-light { ... }
+*/
+
+/* Error message specific to modal if needed, otherwise global .error-message applies */
+.modal-error-message {
+  /* Inherits from .error-message but can add specific margins if needed */
+  margin-bottom: 1rem;
+}

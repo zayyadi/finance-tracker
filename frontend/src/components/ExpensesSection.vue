@@ -1,6 +1,6 @@
 <template>
   <section class="dashboard-section expense-section">
-    <h3>Expenses</h3>
+    <h3>Expenses (Current Month)</h3>
     <div v-if="error" class="error-message">{{ error }}</div>
     <button @click="$emit('openModal', 'expenses')" class="btn add-btn">Add Expense</button>
     
@@ -41,11 +41,26 @@ const formatDate = (dateString) => {
 const fetchExpenses = async () => {
   loading.value = true;
   error.value = null;
-  initialLoad.value = false;
+  initialLoad.value = false; // This remains to control the "No records yet" message logic
+
+  const formatDateToYYYYMMDD = (date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0); // 0 day of next month gives last day of current
+
+  const startDateStr = formatDateToYYYYMMDD(firstDay);
+  const endDateStr = formatDateToYYYYMMDD(lastDay);
+
   try {
     // Note: API endpoint is '/expenses'
-    const response = await api.get('/expenses'); 
-    items.value = response.data || []; // Corrected: API returns the array directly
+    const response = await api.get(`/expenses?startDate=${startDateStr}&endDate=${endDateStr}`);
+    items.value = response.data || [];
   } catch (err) {
     console.error("Error fetching expenses:", err);
     error.value = "Failed to load expense data. " + (err.response?.data?.error || err.message);

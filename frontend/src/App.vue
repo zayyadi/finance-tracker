@@ -22,18 +22,54 @@
 </template>
 
 <script setup>
+import './assets/main.css'; // Ensure main.css is imported
 import Dashboard from './components/Dashboard.vue';
 
 const currentYear = new Date().getFullYear();
 </script>
 
 <style scoped>
-/* Styles from main.html can be scoped here or moved to main.css */
-.app-header { background-color: #2c3e50; color: white; padding: 1em 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.app-header h1 { margin: 0; text-align: center; font-size: 1.8em; }
-.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
-.app-main { padding: 20px 0; }
-.app-footer { text-align: center; padding: 20px 0; background-color: #34495e; color: #ecf0f1; margin-top: 30px; font-size: 0.9em;}
+.app-header {
+  background-color: #2c3e50; /* Dark blue-gray */
+  color: #ffffff;
+  padding: 1rem 0; /* Consistent padding unit */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* Fixed header if desired:
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000; */
+}
+
+.app-header h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.8em; /* Existing size, can be adjusted from main.css's h1 if needed */
+  color: #ffffff; /* Ensure header text is white */
+}
+
+.container {
+  max-width: 1200px;
+  margin-left: auto; /* Use auto for centering block elements */
+  margin-right: auto;
+  padding: 0 1rem; /* Consistent padding unit */
+}
+
+.app-main {
+  padding: 2rem 0; /* More vertical padding for main content area */
+  /* If header is fixed, add top padding to main content to prevent overlap
+  padding-top: 80px; /* Example: if header is ~60px high + some space */
+}
+
+.app-footer {
+  text-align: center;
+  padding: 1.5rem 0; /* Consistent padding unit */
+  background-color: #343a40; /* Darker gray for footer */
+  color: #f8f9fa; /* Light text for contrast */
+  margin-top: 2rem; /* More space above footer */
+  font-size: 0.9em;
+}
 
 /* Add other global layout styles if necessary */
 </style>

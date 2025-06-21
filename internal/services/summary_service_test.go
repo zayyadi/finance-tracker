@@ -1,9 +1,57 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/zayyadi/finance-tracker/internal/database"
+	"github.com/zayyadi/finance-tracker/internal/models"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+// setupSummaryTestDB initializes an in-memory SQLite database for summary service testing.
+func setupSummaryTestDB(t *testing.T) *gorm.DB {
+	// Use a unique DSN for each test to ensure isolation with cache=shared
+	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared", t.Name(), time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	assert.NoError(t, err, "Failed to connect to in-memory SQLite")
+
+	sqlDB, _ := db.DB()
+	t.Cleanup(func() { sqlDB.Close() })
+
+	// Drop tables first for a clean state
+	db.Exec("DROP TABLE IF EXISTS FinancialSummary")
+	db.Exec("DROP TABLE IF EXISTS Expenses")
+	db.Exec("DROP TABLE IF EXISTS Income")
+	db.Exec("DROP TABLE IF EXISTS Users")
+
+	// Auto-migrate schemas based on GORM structs.
+	err = db.AutoMigrate(&models.User{}, &models.Income{}, &models.Expense{}, &models.FinancialSummary{})
+	assert.NoError(t, err, "Failed to auto-migrate models")
+
+	// Optional: Create a dummy user if needed
+	// db.Create(&models.User{Username: "testuser", Email: "test@example.com", PasswordHash: "hash"})
+
+	return db
+}
+
+// seedDataForSummaryTest populates income and expense data for a given period.
+func seedDataForSummaryTest(t *testing.T, db *gorm.DB, dateForIncome time.Time, incomeAmount float64, dateForExpense time.Time, expenseAmount float64) {
+	if incomeAmount > 0 {
+		income := models.Income{Amount: incomeAmount, Category: "Test Income", Date: database.CustomDate{Time: dateForIncome}}
+		err := db.Create(&income).Error
+		assert.NoError(t, err, "Failed to seed income: %+v", income)
+	}
+	if expenseAmount > 0 {
+		expense := models.Expense{Amount: expenseAmount, Category: "Test Expense", Date: database.CustomDate{Time: dateForExpense}}
+		err := db.Create(&expense).Error
+		assert.NoError(t, err, "Failed to seed expense: %+v", expense)
+	}
+}
+
 
 func TestCalculatePeriodDates(t *testing.T) {
 	loc, _ := time.LoadLocation("UTC") // Use a consistent timezone for tests
@@ -121,4 +169,150 @@ func TestCalculatePeriodDates(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- Tests for GetOrCreateFinancialSummary with viewType ---
+
+func TestGetOrCreateFinancialSummary_ViewOverall_Monthly_NoExisting(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	targetDate := time.Date(2023, time.April, 10, 0, 0, 0, 0, time.UTC)
+	periodStart := time.Date(2023, time.April, 1, 0, 0, 0, 0, time.UTC)
+
+	seedDataForSummaryTest(t, db, periodStart.AddDate(0,0,5), 1000, periodStart.AddDate(0,0,10), 300)
+	seedDataForSummaryTest(t, db, periodStart.AddDate(0,0,15), 500, periodStart.AddDate(0,0,20), 200) // Income: 1500, Expense: 500
+
+	summary, err := service.GetOrCreateFinancialSummary("monthly", targetDate, "overall")
+	assert.NoError(t, err)
+	assert.NotNil(t, summary)
+	assert.Equal(t, 1500.0, summary.TotalIncome)
+	assert.Equal(t, 500.0, summary.TotalExpenses)
+	assert.Equal(t, 1000.0, summary.NetBalance)
+	assert.Equal(t, periodStart, summary.PeriodStartDate)
+
+	// Verify it was stored in DB
+	var dbSummary models.FinancialSummary
+	result := db.Where("summary_type = ? AND period_start_date = ?", "monthly", periodStart).First(&dbSummary)
+	assert.NoError(t, result.Error)
+	assert.Equal(t, 1500.0, dbSummary.TotalIncome)
+}
+
+func TestGetOrCreateFinancialSummary_ViewOverall_Monthly_Existing(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	targetDate := time.Date(2023, time.May, 10, 0, 0, 0, 0, time.UTC)
+	periodStart := time.Date(2023, time.May, 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := time.Date(2023, time.May, 31, 0,0,0,0,time.UTC)
+
+	// Pre-store a summary
+	preStoredSummary := models.FinancialSummary{
+		SummaryType:     "monthly",
+		PeriodStartDate: periodStart,
+		PeriodEndDate:   periodEnd,
+		TotalIncome:     2000,
+		TotalExpenses:   800,
+		NetBalance:      1200,
+	}
+	db.Create(&preStoredSummary)
+
+	// Seed some data anyway, to ensure the service prefers the stored one for "overall"
+	seedDataForSummaryTest(t, db, periodStart.AddDate(0,0,5), 100, periodStart.AddDate(0,0,10), 50)
+
+
+	summary, err := service.GetOrCreateFinancialSummary("monthly", targetDate, "overall")
+	assert.NoError(t, err)
+	assert.NotNil(t, summary)
+	assert.Equal(t, 2000.0, summary.TotalIncome, "Should return pre-stored income")
+	assert.Equal(t, 800.0, summary.TotalExpenses, "Should return pre-stored expenses")
+	assert.Equal(t, 1200.0, summary.NetBalance, "Should return pre-stored net balance")
+}
+
+func TestGetOrCreateFinancialSummary_ViewIncome_Monthly(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	targetDate := time.Date(2023, time.June, 10, 0, 0, 0, 0, time.UTC)
+	periodStart := time.Date(2023, time.June, 1, 0, 0, 0, 0, time.UTC)
+
+	seedDataForSummaryTest(t, db, periodStart.AddDate(0,0,5), 1200, periodStart.AddDate(0,0,10), 300)
+
+	summary, err := service.GetOrCreateFinancialSummary("monthly", targetDate, "income")
+	assert.NoError(t, err)
+	assert.NotNil(t, summary)
+	assert.Equal(t, 1200.0, summary.TotalIncome)
+	assert.Equal(t, 0.0, summary.TotalExpenses)
+	assert.Equal(t, 1200.0, summary.NetBalance)
+
+	// Verify it was NOT stored as a new specific record (overall might be there if called before)
+	var dbSummaries []models.FinancialSummary
+	db.Where("summary_type = ? AND period_start_date = ?", "monthly", periodStart).Find(&dbSummaries)
+	// If an overall summary was created by another test or logic, it might exist.
+	// The key is that this "income" view didn't create a *second* record or overwrite overall with partial data.
+	// For simplicity, we check that if a record exists, its expenses are not 0 (unless actual expenses were 0).
+	// This test assumes no prior "overall" record for June.
+	assert.Equal(t, 0, len(dbSummaries), "Income-only view should not be stored, and no overall for June existed")
+}
+
+func TestGetOrCreateFinancialSummary_ViewExpenses_Monthly(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	targetDate := time.Date(2023, time.July, 10, 0, 0, 0, 0, time.UTC)
+	periodStart := time.Date(2023, time.July, 1, 0, 0, 0, 0, time.UTC)
+
+	seedDataForSummaryTest(t, db, periodStart.AddDate(0,0,5), 1500, periodStart.AddDate(0,0,10), 450)
+
+	summary, err := service.GetOrCreateFinancialSummary("monthly", targetDate, "expenses")
+	assert.NoError(t, err)
+	assert.NotNil(t, summary)
+	assert.Equal(t, 0.0, summary.TotalIncome)
+	assert.Equal(t, 450.0, summary.TotalExpenses)
+	assert.Equal(t, -450.0, summary.NetBalance)
+
+	var dbSummaries []models.FinancialSummary
+	db.Where("summary_type = ? AND period_start_date = ?", "monthly", periodStart).Find(&dbSummaries)
+	assert.Equal(t, 0, len(dbSummaries), "Expense-only view should not be stored, and no overall for July existed")
+}
+
+// Similar tests should be added for "weekly" and "yearly" periodTypes if full coverage is desired.
+// For brevity in this example, only monthly is extensively tested for view types.
+// Adding one weekly example:
+func TestGetOrCreateFinancialSummary_ViewIncome_Weekly(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	// Test for a week: Monday 2023-Oct-02 to Sunday 2023-Oct-08
+	targetDateInWeek := time.Date(2023, time.October, 4, 0, 0, 0, 0, time.UTC) // A Wednesday
+
+	seedDataForSummaryTest(t, db, time.Date(2023, time.October, 3, 0,0,0,0,time.UTC), 200, time.Date(2023, time.October, 5,0,0,0,0,time.UTC), 50) // In week
+	seedDataForSummaryTest(t, db, time.Date(2023, time.September, 30,0,0,0,0,time.UTC), 1000, time.Date(2023, time.October, 10,0,0,0,0,time.UTC), 500) // Outside week
+
+	summary, err := service.GetOrCreateFinancialSummary("weekly", targetDateInWeek, "income")
+	assert.NoError(t, err)
+	assert.NotNil(t, summary)
+	assert.Equal(t, 200.0, summary.TotalIncome)
+	assert.Equal(t, 0.0, summary.TotalExpenses)
+	assert.Equal(t, 200.0, summary.NetBalance)
+}
+
+
+func TestGetOrCreateFinancialSummary_ViewNotImplemented(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	targetDate := time.Now()
+
+	_, errSavings := service.GetOrCreateFinancialSummary("monthly", targetDate, "savings")
+	assert.Error(t, errSavings)
+	assert.Contains(t, errSavings.Error(), "viewType 'savings' not yet implemented")
+
+	_, errDebts := service.GetOrCreateFinancialSummary("monthly", targetDate, "debts")
+	assert.Error(t, errDebts)
+	assert.Contains(t, errDebts.Error(), "viewType 'debts' not yet implemented")
+}
+
+func TestGetOrCreateFinancialSummary_ViewInvalid(t *testing.T) {
+	db := setupSummaryTestDB(t)
+	service := NewSummaryService(db)
+	targetDate := time.Now()
+
+	_, err := service.GetOrCreateFinancialSummary("monthly", targetDate, "invalid_view")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid viewType 'invalid_view'")
 }
